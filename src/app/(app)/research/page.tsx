@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FlaskConical, Search, Sparkles } from "lucide-react";
@@ -25,6 +25,25 @@ const FILTERS: Array<Status | "all"> = [
   "learned",
   "rejected",
 ];
+
+// Research Library has two views: the flat card list ("library") and a
+// vertical tree grouped by lineage root ("thread"). Persisted to
+// localStorage so a founder's preferred view survives reloads.
+type ResearchView = "library" | "thread";
+const VIEW_STORAGE_KEY = "research.view";
+
+function loadResearchView(): ResearchView {
+  if (typeof window === "undefined") return "library";
+  return window.localStorage.getItem(VIEW_STORAGE_KEY) === "thread"
+    ? "thread"
+    : "library";
+}
+
+function persistResearchView(v: ResearchView) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(VIEW_STORAGE_KEY, v);
+}
+
 
 function findParentHypothesis(insightId: string): Hypothesis | null {
   const insight = SEED_INSIGHTS.find((i) => i.id === insightId);
@@ -97,6 +116,27 @@ export default function ResearchLibraryPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Status | "all">("all");
+  const [view, setView] = useState<ResearchView>("library");
+
+  useEffect(() => {
+    setView(loadResearchView());
+  }, []);
+
+  function switchView(v: ResearchView) {
+    setView(v);
+    persistResearchView(v);
+  }
+
+  // Walk from a hypothesis to its parent hypothesis, if any. A follow-up
+  // stores parentInsightId; the insight's sourceHypothesisId is the parent
+  // hypothesis. Returns null for hypotheses with no lineage in the current
+  // set (roots).
+  const parentIdOf = useCallback((h: Hypothesis): string | null => {
+    if (!h.parentInsightId) return null;
+    const insight = SEED_INSIGHTS.find((i) => i.id === h.parentInsightId);
+    return insight?.sourceHypothesisId ?? null;
+  }, []);
+
 
   const selected = hypotheses.find((h) => h.id === selectedId) ?? null;
 
@@ -119,6 +159,38 @@ export default function ResearchLibraryPage() {
     const matchesSearch = h.title.toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
   });
+
+  // Thread view: build root -> children map keyed by hypothesis id. A
+  // hypothesis is a root when its parent hypothesis either has no
+  // parentInsightId or points to a parent that isn't in the current set.
+  const tree = useMemo(() => {
+    const byId = new Map(hypotheses.map((h) => [h.id, h]));
+    const kids = new Map<string, Hypothesis[]>();
+    const roots: Hypothesis[] = [];
+    for (const h of hypotheses) {
+      const pid = parentIdOf(h);
+      if (pid && byId.has(pid)) {
+        const arr = kids.get(pid) ?? [];
+        arr.push(h);
+        kids.set(pid, arr);
+      } else {
+        roots.push(h);
+      }
+    }
+    return { roots, kids };
+  }, [hypotheses, parentIdOf]);
+
+  // Thread-view visibility: a subtree stays visible when the root or any
+  // descendant passes the search + filter.
+  const visibleIds = useMemo(() => new Set(visible.map((h) => h.id)), [visible]);
+  const subtreeMatches = useCallback(
+    function walk(h: Hypothesis): boolean {
+      if (visibleIds.has(h.id)) return true;
+      const kids = tree.kids.get(h.id) ?? [];
+      return kids.some(walk);
+    },
+    [visibleIds, tree],
+  );
 
   function generateInitial() {
     setAll(SEED_HYPOTHESES);
@@ -164,6 +236,72 @@ export default function ResearchLibraryPage() {
     router.push("/experiments");
   }
 
+
+  const cardClass = (isSelected: boolean) =>
+    "flex flex-col gap-2 border bg-card p-3 text-left transition-colors w-full " +
+    (isSelected ? "border-primary" : "border-border hover:border-foreground/30");
+
+  function HypothesisCardButton({ h, depth }: { h: Hypothesis; depth?: number }) {
+    const isSelected = h.id === selectedId;
+    return (
+      <button
+        onClick={() => setSelectedId(h.id)}
+        data-thread-node-id={h.id}
+        data-thread-depth={depth ?? 0}
+        className={cardClass(isSelected)}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="line-clamp-2 text-sm font-semibold">{h.title}</span>
+          <StatusPill status={h.status} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+            {h.primaryMetric}
+          </span>
+        </div>
+        <DerivedFromLine h={h} />
+      </button>
+    );
+  }
+
+  function renderLibraryList() {
+    if (visible.length === 0) {
+      return (
+        <div className="border border-dashed border-border bg-card p-4 text-center text-xs text-muted-foreground">
+          No hypotheses match this filter.
+        </div>
+      );
+    }
+    return visible.map((h) => <HypothesisCardButton key={h.id} h={h} />);
+  }
+
+  function renderThreadNode(h: Hypothesis, depth: number): React.ReactNode {
+    const kids = tree.kids.get(h.id) ?? [];
+    return (
+      <div
+        key={h.id}
+        className="flex flex-col gap-2"
+        style={{ marginLeft: depth * 20 }}
+        data-thread-branch-root={depth === 0 ? h.id : undefined}
+      >
+        <HypothesisCardButton h={h} depth={depth} />
+        {kids.map((k) => renderThreadNode(k, depth + 1))}
+      </div>
+    );
+  }
+
+  function renderThreadList() {
+    const roots = tree.roots.filter(subtreeMatches);
+    if (roots.length === 0) {
+      return (
+        <div className="border border-dashed border-border bg-card p-4 text-center text-xs text-muted-foreground">
+          No hypotheses match this filter.
+        </div>
+      );
+    }
+    return roots.map((r) => renderThreadNode(r, 0));
+  }
+
   if (!loaded) return null;
 
   if (hypotheses.length === 0) {
@@ -206,10 +344,32 @@ export default function ResearchLibraryPage() {
             came from.
           </p>
         </div>
-        <Button onClick={generateMore} variant="outline" className="shrink-0 gap-2">
-          <Sparkles className="size-4" />
-          Generate More
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <div
+            data-research-view={view}
+            className="flex items-center border border-border bg-card p-0.5"
+          >
+            {(["library", "thread"] as const).map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                data-view-choice={choice}
+                onClick={() => switchView(choice)}
+                className={`rounded-sm px-2.5 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+                  view === choice
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {choice === "library" ? "Library" : "Thread"}
+              </button>
+            ))}
+          </div>
+          <Button onClick={generateMore} variant="outline" className="gap-2">
+            <Sparkles className="size-4" />
+            Generate More
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -240,39 +400,8 @@ export default function ResearchLibraryPage() {
             ))}
           </div>
 
-          <div className="flex flex-col gap-2">
-            {visible.length === 0 && (
-              <div className="border border-dashed border-border bg-card p-4 text-center text-xs text-muted-foreground">
-                No hypotheses match this filter.
-              </div>
-            )}
-            {visible.map((h) => {
-              const isSelected = h.id === selectedId;
-              return (
-                <button
-                  key={h.id}
-                  onClick={() => setSelectedId(h.id)}
-                  className={`flex flex-col gap-2 border bg-card p-3 text-left transition-colors ${
-                    isSelected
-                      ? "border-primary"
-                      : "border-border hover:border-foreground/30"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="line-clamp-2 text-sm font-semibold">
-                      {h.title}
-                    </span>
-                    <StatusPill status={h.status} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {h.primaryMetric}
-                    </span>
-                  </div>
-                  <DerivedFromLine h={h} />
-                </button>
-              );
-            })}
+          <div className="flex flex-col gap-2" data-research-list={view}>
+            {view === "library" ? renderLibraryList() : renderThreadList()}
           </div>
         </div>
 

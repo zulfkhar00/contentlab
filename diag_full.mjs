@@ -455,6 +455,69 @@ expect(
   `count=${stdSections}`,
 );
 
+// ---------- /research: Library <-> Thread view toggle (Step S13) ----------
+await page.goto("http://localhost:3000/research", { waitUntil: "networkidle" });
+await page.waitForTimeout(300);
+// Toggle buttons render
+expect(
+  "/research: toggle exposes both view choices",
+  (await page.locator('[data-view-choice="library"]').count()) === 1 &&
+    (await page.locator('[data-view-choice="thread"]').count()) === 1,
+);
+// Default is library on first visit
+const defaultView = await page.getAttribute('[data-research-view]', 'data-research-view');
+expect(
+  "/research: default view is library",
+  defaultView === "library",
+  `saw: ${defaultView}`,
+);
+// Switch to thread and verify container attribute + tree nodes render
+await page.locator('[data-view-choice="thread"]').click();
+await page.waitForTimeout(200);
+const threadView = await page.getAttribute('[data-research-view]', 'data-research-view');
+expect(
+  "/research: clicking Thread sets data-research-view=thread",
+  threadView === "thread",
+  `saw: ${threadView}`,
+);
+const threadNodes = await page.locator('[data-thread-node-id]').count();
+expect(
+  "/research: thread view renders at least one lineage node",
+  threadNodes >= 1,
+  `nodes=${threadNodes}`,
+);
+// Follow-up i1-c2-hypothesis (added earlier in this run) should render as a
+// child under its root, i.e. depth > 0.
+const followUpDepth = await page.getAttribute(
+  '[data-thread-node-id="i1-c2-hypothesis"]',
+  'data-thread-depth',
+);
+expect(
+  "/research: follow-up hypothesis renders as descendant in thread view",
+  followUpDepth !== null && followUpDepth !== "0",
+  `depth=${followUpDepth}`,
+);
+// Persistence across reload
+const persistedBefore = await page.evaluate(() =>
+  window.localStorage.getItem("research.view"),
+);
+expect(
+  "/research: switch persists to localStorage research.view=thread",
+  persistedBefore === "thread",
+  `saw: ${persistedBefore}`,
+);
+await page.reload({ waitUntil: "networkidle" });
+await page.waitForTimeout(300);
+const afterReload = await page.getAttribute('[data-research-view]', 'data-research-view');
+expect(
+  "/research: thread view survives a reload",
+  afterReload === "thread",
+  `saw: ${afterReload}`,
+);
+// Reset back to library so downstream inspector checks work with the flat list.
+await page.locator('[data-view-choice="library"]').click();
+await page.waitForTimeout(150);
+
 // ---------- Verdict ----------
 console.log("\n---");
 console.log(`Total console errors observed: ${consoleErrors.length}`);
