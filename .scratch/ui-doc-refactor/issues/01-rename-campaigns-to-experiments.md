@@ -1,6 +1,6 @@
 # Rename /campaigns to /experiments
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 
 Vocabulary froze on the word experiment but the route and file tree still say campaign. Doc S2 flags this.
@@ -18,3 +18,13 @@ Done when:
 
 - npm run dev boots with no route errors
 - node diag_full.mjs is green with all checks passing
+
+
+## Answer
+
+Physical rename went through git mv:
+
+- src/app/(app)/campaigns/ -> src/app/(app)/experiments/
+- src/lib/campaign.tsx -> src/lib/experiment.tsx
+
+Every referrer now imports @/lib/experiment and hrefs /experiments. The one-shot localStorage migration reading legacy cl_campaign into cl_experiment stays as-is; diag verifies it still runs. tsc is clean and node diag_full.mjs is green with all 78 checks and zero console errors.

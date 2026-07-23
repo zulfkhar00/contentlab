@@ -1,4 +1,4 @@
-import { clicksPer1k, type VariantRole } from "@/lib/campaign";
+import { clicksPer1k, type VariantRole } from "@/lib/experiment";
 import type { Hypothesis, HypothesisRelationship } from "@/lib/hypotheses";
 
 export type ComparedVariant = {
@@ -30,7 +30,7 @@ export type Insight = {
   // Insight" link and the "Follow-up of" note resolve without guessing.
   sourceHypothesisId: string;
   // Kept named `experimentName` in the vocabulary shift; the old
-  // `campaignName` field on persisted data would still parse but the seed
+  // `campaignName` was retired; new data uses experimentName. Leave the
   // insights below all set the new name.
   experimentName: string;
   hypothesis: string;
@@ -79,7 +79,7 @@ export type Insight = {
 // Claude-generated insight once that service exists. Deliberately built
 // around h5 ("Short pain-first hooks outperform long-form storytelling")
 // rather than the brief's Founder Failure / Product Demo experiment — that
-// experiment is still active and in-progress in lib/campaign.tsx, so it
+// experiment is still active and in-progress in lib/experiment.tsx, so it
 // can't also be shown here as completed without contradicting the
 // Experiments/Videos/Overview surfaces.
 export const SEED_INSIGHTS: Insight[] = [

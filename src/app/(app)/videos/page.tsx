@@ -14,7 +14,7 @@ import {
   getTrackingWindow,
   type Variant,
   type VariantRole,
-} from "@/lib/campaign";
+} from "@/lib/experiment";
 
 const KPIS = [
   { label: "Published Videos", value: "12" },
@@ -59,7 +59,7 @@ export default function VideosPage() {
     navigator.clipboard?.writeText(url);
   }
 
-  // Same gate every other (app) page uses: don't render campaign-derived UI
+  // Same gate every other (app) page uses: don't render experiment-derived UI
   // until the useEffect in ExperimentProvider has re-read localStorage. Without
   // this, VideoInspector's tracking-window bar renders a full-precision
   // `Date.now()`-derived width on the server (e.g. "5.555559799382716%"),
@@ -75,7 +75,7 @@ export default function VideosPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Videos</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Inspect published variants, tracking snapshots, and product-click
-          attribution across campaigns.
+          attribution across experiments.
         </p>
       </div>
 
@@ -282,7 +282,7 @@ function VideoInspector({
               URL
             </Button>
             <Button asChild variant="outline" size="sm" className="gap-1 text-[10px]">
-              <Link href="/campaigns">
+              <Link href="/experiments">
                 <Rocket className="size-3.5" />
                 Campaign
               </Link>

@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const APP_PREFIXES = [
   "/overview",
   "/research",
-  "/campaigns",
+  "/experiments",
   "/videos",
   "/insights",
   "/settings",

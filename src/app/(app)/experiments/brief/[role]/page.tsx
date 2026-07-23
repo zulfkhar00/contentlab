@@ -29,7 +29,7 @@ import {
   type Variant,
   type VariantRole,
   type VariantBriefEdit,
-} from "@/lib/campaign";
+} from "@/lib/experiment";
 import { useProjectContext } from "@/lib/project-context";
 
 type ScriptTag = "VARIABLE" | "CONTROLLED";
@@ -108,7 +108,7 @@ export default function RecordingBriefPage() {
           No variant found for &quot;{params.role}&quot;.
         </p>
         <Button asChild variant="outline" className="w-fit gap-2">
-          <Link href="/campaigns">
+          <Link href="/experiments">
             <ArrowLeft className="size-4" />
             Back to Experiment
           </Link>
@@ -169,7 +169,7 @@ export default function RecordingBriefPage() {
     <>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-          <Link href="/campaigns" className="flex items-center gap-1 hover:text-foreground">
+          <Link href="/experiments" className="flex items-center gap-1 hover:text-foreground">
             <ArrowLeft className="size-3.5" />
             Back to Experiment
           </Link>

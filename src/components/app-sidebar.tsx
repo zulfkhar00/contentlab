@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 const NAV = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
   { label: "Research", href: "/research", icon: FlaskConical },
-  { label: "Experiments", href: "/campaigns", icon: Megaphone },
+  { label: "Experiments", href: "/experiments", icon: Megaphone },
   { label: "Videos", href: "/videos", icon: Clapperboard },
   { label: "Insights", href: "/insights", icon: BarChart3 },
 ];
@@ -63,7 +63,7 @@ export function AppSidebar() {
       {/* CTA */}
       <div className="mt-4">
         <Button asChild className="w-full gap-2">
-          <Link href="/campaigns">
+          <Link href="/experiments">
             <Plus className="size-4" />
             Create Experiment
           </Link>

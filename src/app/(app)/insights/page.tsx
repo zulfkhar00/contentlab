@@ -18,7 +18,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Lightbulb, Sparkles, ArrowRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { clicksPer1k, formatTimestamp } from "@/lib/campaign";
+import { clicksPer1k, formatTimestamp } from "@/lib/experiment";
 import {
   SEED_INSIGHTS,
   insightClicksPer1k,
@@ -336,7 +336,7 @@ function InsightsPageInner() {
           <Lightbulb className="size-7 text-muted-foreground" />
           <h3 className="text-lg font-semibold tracking-tight">No insights yet</h3>
           <p className="max-w-md text-sm text-muted-foreground">
-            Insights appear once a campaign completes its tracking windows.
+            Insights appear once an experiment completes its tracking windows.
           </p>
         </div>
       ) : (

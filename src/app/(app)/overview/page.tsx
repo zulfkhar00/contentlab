@@ -16,7 +16,7 @@ import {
   getPublishedCount,
   variantStatusLabel,
   type ExperimentData,
-} from "@/lib/campaign";
+} from "@/lib/experiment";
 import {
   useHypotheses,
   STATUS_LABEL,
@@ -83,7 +83,7 @@ function computeNextAction(
         "Script, hook, and checklist are ready. Record it and paste the URL after publishing.",
       cta: {
         label: "Open Recording Brief",
-        href: `/campaigns / brief / ${nextVariant.role.toLowerCase()}`.replaceAll(" ", ""),
+        href: `/experiments/brief/${nextVariant.role.toLowerCase()}`,
       },
     };
   }

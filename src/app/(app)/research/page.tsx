@@ -161,7 +161,7 @@ export default function ResearchLibraryPage() {
 
   function createExperiment(id: string) {
     updateHypothesis(id, { status: "testing" });
-    router.push("/campaigns");
+    router.push("/experiments");
   }
 
   if (!loaded) return null;
@@ -473,7 +473,7 @@ function HypothesisInspector({
         )}
         {h.status === "testing" && (
           <Button asChild size="sm">
-            <Link href="/campaigns">View Experiment</Link>
+            <Link href="/experiments">View Experiment</Link>
           </Button>
         )}
         {h.status === "learned" && (

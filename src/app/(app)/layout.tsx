@@ -1,7 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { ProjectContextProvider } from "@/lib/project-context";
-import { ExperimentProvider } from "@/lib/campaign";
+import { ExperimentProvider } from "@/lib/experiment";
 import { HypothesesProvider } from "@/lib/hypotheses";
 
 export default function AppLayout({

@@ -330,49 +330,49 @@ expect(
   (await page.getByTestId("research-backlog").count()) === 1,
 );
 
-// ---------- /campaigns: Experiment Workspace redesign (Step 4) ----------
-await page.goto("http://localhost:3000/campaigns", { waitUntil: "networkidle" });
+// ---------- /experiments: Experiment Workspace redesign (Step 4) ----------
+await page.goto("http://localhost:3000/experiments", { waitUntil: "networkidle" });
 await page.waitForTimeout(300);
 expect(
-  "/campaigns: Experiment header block present",
+  "/experiments: Experiment header block present",
   (await page.getByTestId("experiment-header").count()) === 1,
 );
 expect(
-  "/campaigns: Experiment Integrity panel present",
+  "/experiments: Experiment Integrity panel present",
   (await page.getByTestId("experiment-integrity").count()) === 1,
 );
 expect(
-  "/campaigns: Variable Under Test label present",
+  "/experiments: Variable Under Test label present",
   (await page.getByText("Variable Under Test").count()) >= 1,
 );
 expect(
-  "/campaigns: Keep Controlled label present",
+  "/experiments: Keep Controlled label present",
   (await page.getByText("Keep Controlled").count()) === 1,
 );
 expect(
-  "/campaigns: Three variant cards rendered",
+  "/experiments: Three variant cards rendered",
   (await page.getByTestId("variant-cards").locator("> div").count()) === 3,
 );
 expect(
-  "/campaigns: Experiment Timeline present",
+  "/experiments: Experiment Timeline present",
   (await page.getByTestId("experiment-timeline").count()) === 1,
 );
 const timelineRows = await page.getByTestId("experiment-timeline").locator("ul > li").count();
 expect(
-  "/campaigns: Timeline has at least three events",
+  "/experiments: Timeline has at least three events",
   timelineRows >= 3,
   `rows=${timelineRows}`,
 );
 // Primary action strip appears whenever there is a next variant OR all are completed.
 const primaryStrip = await page.getByTestId("primary-action-strip").count();
 expect(
-  "/campaigns: Primary action strip renders when applicable",
+  "/experiments: Primary action strip renders when applicable",
   primaryStrip <= 1,
   `count=${primaryStrip}`,
 );
 
-// ---------- /campaigns/brief/[role]: Recording Brief redesign (Step 5) ----------
-await page.goto("http://localhost:3000/campaigns/brief/b", { waitUntil: "networkidle" });
+// ---------- /experiments/brief/[role]: Recording Brief redesign (Step 5) ----------
+await page.goto("http://localhost:3000/experiments/brief/b", { waitUntil: "networkidle" });
 await page.waitForTimeout(300);
 expect(
   "/brief: Experiment Context block present",

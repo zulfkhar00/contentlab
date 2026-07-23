@@ -23,7 +23,7 @@ import {
   type Variant,
   type VariantRole,
   type VariantStatus,
-} from "@/lib/campaign";
+} from "@/lib/experiment";
 import { useHypotheses, type Hypothesis } from "@/lib/hypotheses";
 
 function StatusPill({
@@ -139,7 +139,7 @@ export default function ExperimentWorkspacePage() {
   const primaryAction = nextVariant
     ? {
         label: `Review Variant ${nextVariant.role}`,
-        href: `/campaigns/brief/${nextVariant.role.toLowerCase()}`,
+        href: `/experiments/brief/${nextVariant.role.toLowerCase()}`,
       }
     : allCompleted
       ? { label: "Review Experiment Results", href: "/insights" }
@@ -337,7 +337,7 @@ export default function ExperimentWorkspacePage() {
                 ) : (
                   <>
                     <Button asChild size="sm">
-                      <Link href={`/campaigns/brief/${v.role.toLowerCase()}`}>
+                      <Link href={`/experiments/brief/${v.role.toLowerCase()}`}>
                         Review Variant
                       </Link>
                     </Button>

@@ -1,10 +1,10 @@
 "use client";
 
-// NOTE(vocabulary-shim): the file name stays `campaign.tsx` for now but the
-// exports use the correct product vocabulary — Experiment, not Campaign.
-// core_ideas.md renames the entity: one Hypothesis maps to exactly one
-// Experiment with three Variants, and "campaign" is retired. Renaming the
-// file itself is a follow-up when the Experiment Workspace screen ships.
+// Owns Experiment + Variant state. One Hypothesis maps to exactly one
+// Experiment with three Variants. Persists to `cl_experiment` in
+// localStorage; a one-shot migration reads the legacy `cl_campaign` key
+// once and drops it, so existing sessions from before the rename don't
+// lose their in-progress variants.
 
 import {
   createContext,

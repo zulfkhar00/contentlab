@@ -48,11 +48,11 @@ Run any driver script from inside `content-lab/` (not `/tmp`) so
 ## Gotchas found so far
 
 - All `(app)` pages gate their real render on a `loaded` flag from
-  `useCampaign()`/`useHypotheses()` (false until a `useEffect` reads
+  `useExperiment()`/`useHypotheses()` (false until a `useEffect` reads
   localStorage on mount). Server-rendered/curl'd HTML will look empty —
   you need a real browser context, curl won't show the actual page content.
 - Client state mutators exposed by the context providers
-  (`lib/campaign.tsx`, `lib/hypotheses.tsx`) do **not** dedupe by id — two
+  (`lib/experiment.tsx`, `lib/hypotheses.tsx`) do **not** dedupe by id — two
   back-to-back clicks before React re-renders can both read a stale
   "not yet added" check and insert two entries with the same id. Worth
   re-probing after any change to an "add once" button (double-click via
