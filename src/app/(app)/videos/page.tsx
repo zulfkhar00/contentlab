@@ -35,7 +35,7 @@ function StatusDot({ tone }: { tone: "active" | "idle" }) {
 }
 
 export default function VideosPage() {
-  const { campaign } = useCampaign();
+  const { campaign, loaded } = useCampaign();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("All");
 
@@ -58,6 +58,16 @@ export default function VideosPage() {
   function copyUrl(url: string) {
     navigator.clipboard?.writeText(url);
   }
+
+  // Same gate every other (app) page uses: don't render campaign-derived UI
+  // until the useEffect in CampaignProvider has re-read localStorage. Without
+  // this, VideoInspector's tracking-window bar renders a full-precision
+  // `Date.now()`-derived width on the server (e.g. "5.555559799382716%"),
+  // then the browser's CSSOM re-serializes that inline style to 6 significant
+  // digits ("5.55556%") on parse, and React's client render diffs the two →
+  // hydration mismatch. Gating on `loaded` moves the whole tracking-window
+  // computation past hydration, where there's nothing to diff against.
+  if (!loaded) return null;
 
   return (
     <>

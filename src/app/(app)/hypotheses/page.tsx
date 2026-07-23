@@ -17,31 +17,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjectContext } from "@/lib/project-context";
-
-type Status = "generated" | "approved" | "testing" | "tested" | "rejected";
-
-type Hypothesis = {
-  id: string;
-  title: string;
-  statement: string;
-  category: string;
-  primaryMetric: string;
-  rationale: string;
-  status: Status;
-};
+import {
+  useHypotheses,
+  SEED_HYPOTHESES,
+  STATUS_LABEL,
+  type Hypothesis,
+  type Status,
+} from "@/lib/hypotheses";
+import { SEED_INSIGHTS, toHypothesis, type Insight } from "@/lib/insights";
 
 type Revision = {
   statement: string;
   primaryMetric: string;
   rationale: string;
-};
-
-const STATUS_LABEL: Record<Status, string> = {
-  generated: "Generated",
-  approved: "Approved",
-  testing: "Testing",
-  tested: "Tested",
-  rejected: "Rejected",
 };
 
 const FILTERS: Array<Status | "all"> = [
@@ -53,70 +41,11 @@ const FILTERS: Array<Status | "all"> = [
   "rejected",
 ];
 
-const SEED_HYPOTHESES: Hypothesis[] = [
-  {
-    id: "h1",
-    title: "Pain hooks outperform product demos",
-    statement:
-      "Founder pain stories will drive more product clicks than direct product feature demos.",
-    category: "Pain / Founder Story",
-    primaryMetric: "Clicks / 1K Views",
-    rationale: "Pain-first content creates relevance before introducing the product.",
-    status: "approved",
-  },
-  {
-    id: "h2",
-    title: "Founder failure stories drive more product clicks",
-    statement:
-      "Founder failure stories drive more product clicks than generic product demos.",
-    category: "Founder Story",
-    primaryMetric: "Clicks / 1K Views",
-    rationale: "Concrete failure stories build more trust than generic pitches.",
-    status: "testing",
-  },
-  {
-    id: "h3",
-    title: "Distribution problem beats AI automation angle",
-    statement:
-      "Technical founders respond more to distribution pain than generic AI automation benefits.",
-    category: "Contrarian Insight",
-    primaryMetric: "Clicks / 1K Views",
-    rationale:
-      "Distribution failure is more emotionally relevant to technical founders than generic AI benefits.",
-    status: "generated",
-  },
-  {
-    id: "h4",
-    title: "Founder journey creates more trust",
-    statement:
-      "Founder journey videos will generate more product-related comments per 1,000 views than polished product pitches.",
-    category: "Founder Story",
-    primaryMetric: "Comments / 1K Views",
-    rationale:
-      "Personal narratives build community trust more effectively than polished pitches.",
-    status: "generated",
-  },
-  {
-    id: "h5",
-    title: "Short pain-first hooks outperform long-form storytelling",
-    statement:
-      "Videos that open with a short, concrete pain hook will generate more clicks per 1,000 views than longer narrative openings.",
-    category: "Product / Feature",
-    primaryMetric: "Clicks / 1K Views",
-    rationale: "Shorter hooks reduce drop-off before the CTA is shown.",
-    status: "tested",
-  },
-  {
-    id: "h6",
-    title: "Use trending sounds for every post",
-    statement:
-      "Attaching trending sounds to every video will generate more clicks than videos without trending sounds.",
-    category: "Format",
-    primaryMetric: "Views",
-    rationale: "Sound trends are noisy and don't isolate the message variable.",
-    status: "rejected",
-  },
-];
+function findParentHypothesis(insightId: string): Hypothesis | null {
+  const insight = SEED_INSIGHTS.find((i) => i.id === insightId);
+  if (!insight) return null;
+  return SEED_HYPOTHESES.find((h) => h.id === insight.sourceHypothesisId) ?? null;
+}
 
 function StatusPill({ status }: { status: Status }) {
   const style =
@@ -162,7 +91,14 @@ const QUICK_ACTIONS = ["Make sharper", "More founder-led", "Less salesy", "More 
 export default function HypothesesPage() {
   const router = useRouter();
   const { context: projectContext } = useProjectContext();
-  const [hypotheses, setHypotheses] = useState<Hypothesis[]>([]);
+  const {
+    hypotheses,
+    loaded,
+    addHypothesis,
+    updateHypothesis: setHypothesisFields,
+    removeHypothesis,
+    setAll,
+  } = useHypotheses();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Status | "all">("all");
@@ -194,7 +130,7 @@ export default function HypothesesPage() {
   });
 
   function generateInitial() {
-    setHypotheses(SEED_HYPOTHESES);
+    setAll(SEED_HYPOTHESES);
     setSelectedId(SEED_HYPOTHESES[0].id);
   }
 
@@ -210,11 +146,11 @@ export default function HypothesesPage() {
       rationale: "Generated to explore an angle not yet covered by the backlog.",
       status: "generated",
     };
-    setHypotheses((hs) => [fresh, ...hs]);
+    addHypothesis(fresh);
   }
 
   function updateHypothesis(id: string, patch: Partial<Hypothesis>) {
-    setHypotheses((hs) => hs.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+    setHypothesisFields(id, patch);
   }
 
   function approve(id: string) {
@@ -230,7 +166,7 @@ export default function HypothesesPage() {
   }
 
   function remove(id: string) {
-    setHypotheses((hs) => hs.filter((h) => h.id !== id));
+    removeHypothesis(id);
     if (selectedId === id) setSelectedId(null);
   }
 
@@ -239,17 +175,26 @@ export default function HypothesesPage() {
     router.push("/campaigns");
   }
 
-  function createFollowUp(h: Hypothesis) {
-    const followUp: Hypothesis = {
-      id: `h-fu-${Date.now()}`,
-      title: `Follow-up: ${h.title}`,
-      statement: `Building on "${h.statement}" — testing a follow-up refinement.`,
-      category: h.category,
-      primaryMetric: h.primaryMetric,
-      rationale: "Follow-up drafted from a completed campaign's insight.",
-      status: "generated",
-    };
-    setHypotheses((hs) => [followUp, ...hs]);
+  // Reuses the same Insight -> Hypothesis mapping the Insights page's "Add to
+  // Hypotheses" button uses, so a follow-up drafted from either entry point
+  // carries the same lineage (parentInsightId) instead of two divergent
+  // ad-hoc shapes. Falls back to a generic placeholder only if no Insight
+  // exists yet for this hypothesis (shouldn't happen for h5 today).
+  function createFollowUp(h: Hypothesis, insight?: Insight) {
+    const followUp: Hypothesis = insight
+      ? toHypothesis(insight)
+      : {
+          id: `h-fu-${Date.now()}`,
+          title: `Follow-up: ${h.title}`,
+          statement: `Building on "${h.statement}" — testing a follow-up refinement.`,
+          category: h.category,
+          primaryMetric: h.primaryMetric,
+          rationale: "Follow-up drafted from a completed campaign's insight.",
+          status: "generated",
+        };
+    if (!hypotheses.some((existing) => existing.id === followUp.id)) {
+      addHypothesis(followUp);
+    }
     setSelectedId(followUp.id);
   }
 
@@ -285,6 +230,8 @@ export default function HypothesesPage() {
   function discardRevision() {
     setRevision(null);
   }
+
+  if (!loaded) return null;
 
   if (hypotheses.length === 0) {
     return (
@@ -450,6 +397,13 @@ export default function HypothesesPage() {
               {visible.map((h) => {
                 const isSelected = h.id === selectedId;
                 const isEditing = editingId === h.id;
+                const parentHypothesis = h.parentInsightId
+                  ? findParentHypothesis(h.parentInsightId)
+                  : null;
+                const relatedInsight =
+                  h.status === "tested"
+                    ? SEED_INSIGHTS.find((i) => i.sourceHypothesisId === h.id)
+                    : undefined;
                 return (
                   <div
                     key={h.id}
@@ -463,6 +417,11 @@ export default function HypothesesPage() {
                       <CategoryPill>{h.category}</CategoryPill>
                     </div>
                     <h4 className="mb-1 font-semibold">{h.title}</h4>
+                    {parentHypothesis && (
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Follow-up of: {parentHypothesis.statement}
+                      </p>
+                    )}
 
                     {isEditing ? (
                       <div
@@ -567,9 +526,20 @@ export default function HypothesesPage() {
                         {h.status === "tested" && (
                           <>
                             <Button asChild size="sm" variant="ghost">
-                              <Link href="/insights">View Insight</Link>
+                              <Link
+                                href={
+                                  relatedInsight
+                                    ? `/insights?id=${relatedInsight.id}`
+                                    : "/insights"
+                                }
+                              >
+                                View Insight
+                              </Link>
                             </Button>
-                            <Button size="sm" onClick={() => createFollowUp(h)}>
+                            <Button
+                              size="sm"
+                              onClick={() => createFollowUp(h, relatedInsight)}
+                            >
                               Create Follow-up
                             </Button>
                           </>

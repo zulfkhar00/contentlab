@@ -17,35 +17,19 @@ import {
   variantStatusLabel,
   variantStatusTone,
 } from "@/lib/campaign";
+import { useHypotheses, STATUS_LABEL } from "@/lib/hypotheses";
+import { SEED_INSIGHTS, insightClicksPer1k } from "@/lib/insights";
 
-/* ---- Seed data not yet backed by a real store (account-wide history,
-   hypothesis backlog, insights) — unrelated to the single active campaign
-   above, so they stay as illustrative seed content for now. ---- */
+/* ---- Seed data not yet backed by a real store (account-wide video/click
+   history) — unrelated to the single active campaign above, so it stays as
+   illustrative seed content for now. Hypothesis Backlog and Recent Insights
+   below read from the real shared stores (lib/hypotheses, lib/insights). ---- */
 
 const KPIS = [
   { label: "Total Videos", value: "12" },
   { label: "Total Views", value: "45.2K" },
   { label: "Total Clicks", value: "1.2K" },
   { label: "Clicks / 1K Views", value: "26.5" },
-];
-
-const BACKLOG = [
-  { title: "Pain hooks outperform product demos", status: "Approved" },
-  { title: "Distribution problem beats AI automation angle", status: "Generated" },
-  { title: "Founder journey creates more trust", status: "Generated" },
-];
-
-const INSIGHTS = [
-  {
-    title: "Specific failure hooks drive higher intent",
-    evidence: "14.2 clicks / 1K views vs 4.1 baseline",
-    recommendation: "Repeat with a stronger CTA.",
-  },
-  {
-    title: "Product demos convert despite lower reach",
-    evidence: "3.1K views, 15.0 clicks / 1K views",
-    recommendation: "Introduce product after the pain hook.",
-  },
 ];
 
 /* ---- Small primitives ---- */
@@ -81,12 +65,17 @@ function MonoLabel({ children }: { children: React.ReactNode }) {
 /* ---- Page ---- */
 
 export default function OverviewPage() {
-  const { campaign, loaded } = useCampaign();
+  const { campaign, loaded: campaignLoaded } = useCampaign();
+  const { hypotheses, loaded: hypothesesLoaded } = useHypotheses();
   const status = getCampaignStatus(campaign.variants);
   const published = getPublishedCount(campaign.variants);
   const nextVariant = getNextActionVariant(campaign.variants);
 
-  if (!loaded) return null;
+  if (!campaignLoaded || !hypothesesLoaded) return null;
+
+  const backlog = hypotheses
+    .filter((h) => h.status === "generated" || h.status === "approved")
+    .slice(0, 3);
 
   return (
     <>
@@ -231,18 +220,27 @@ export default function OverviewPage() {
               <MonoLabel>Hypothesis Backlog</MonoLabel>
             </div>
             <div className="flex flex-col gap-2 p-3">
-              {BACKLOG.map((h) => (
+              {backlog.length > 0 ? (
+                backlog.map((h) => (
+                  <Link
+                    key={h.id}
+                    href="/hypotheses"
+                    className="cursor-pointer rounded border border-border p-3 transition-colors hover:border-primary"
+                  >
+                    <h5 className="mb-1 text-sm font-medium">{h.title}</h5>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {STATUS_LABEL[h.status]}
+                    </span>
+                  </Link>
+                ))
+              ) : (
                 <Link
-                  key={h.title}
                   href="/hypotheses"
-                  className="cursor-pointer rounded border border-border p-3 transition-colors hover:border-primary"
+                  className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground transition-colors hover:border-primary"
                 >
-                  <h5 className="mb-1 text-sm font-medium">{h.title}</h5>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {h.status}
-                  </span>
+                  No hypotheses yet — generate your first batch.
                 </Link>
-              ))}
+              )}
             </div>
           </div>
 
@@ -253,19 +251,30 @@ export default function OverviewPage() {
               <Lightbulb className="size-4 text-muted-foreground" />
             </div>
             <div className="flex flex-col gap-2 p-3">
-              {INSIGHTS.map((i) => (
-                <div key={i.title} className="rounded bg-secondary p-3">
-                  <h5 className="mb-2 text-sm font-medium leading-tight">
-                    {i.title}
-                  </h5>
-                  <p className="mb-1 text-xs text-muted-foreground">
-                    Evidence: {i.evidence}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Recommendation: {i.recommendation}
-                  </p>
-                </div>
-              ))}
+              {SEED_INSIGHTS.length > 0 ? (
+                SEED_INSIGHTS.map((i) => (
+                  <Link
+                    key={i.id}
+                    href={`/insights?id=${i.id}`}
+                    className="rounded bg-secondary p-3 transition-colors hover:bg-secondary/70"
+                  >
+                    <h5 className="mb-2 text-sm font-medium leading-tight">
+                      {i.hypothesis}
+                    </h5>
+                    <p className="mb-1 text-xs text-muted-foreground">
+                      Evidence: {insightClicksPer1k(i.control)} vs{" "}
+                      {insightClicksPer1k(i.treatment)} clicks / 1K views
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Recommendation: {i.recommendedNextTest}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <p className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                  No insights yet — insights appear once a campaign completes.
+                </p>
+              )}
             </div>
           </div>
         </div>
