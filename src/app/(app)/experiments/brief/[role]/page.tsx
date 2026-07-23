@@ -197,6 +197,9 @@ export default function RecordingBriefPage() {
         <h2 className="text-2xl font-semibold tracking-tight">
           Variant {variant.role} — {variant.title}
         </h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Can you execute this variant while preserving the experiment design?
+        </p>
       </div>
 
       <section data-testid="experiment-context" className="grid grid-cols-1 gap-3 border border-border bg-card p-5 md:grid-cols-3">

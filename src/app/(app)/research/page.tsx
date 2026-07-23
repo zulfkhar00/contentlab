@@ -14,7 +14,7 @@ import {
   type Hypothesis,
   type Status,
 } from "@/lib/hypotheses";
-import { SEED_INSIGHTS, toHypothesis, type Insight } from "@/lib/insights";
+import { SEED_INSIGHTS, toHypothesis, insightClicksPer1k, type Insight } from "@/lib/insights";
 
 const FILTERS: Array<Status | "all"> = [
   "all",
@@ -258,6 +258,20 @@ export default function ResearchLibraryPage() {
           <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
             {h.primaryMetric}
           </span>
+          {h.status === "learned" && (() => {
+            const ins = findRelatedInsight(h.id);
+            if (!ins) return null;
+            const best = insightClicksPer1k(ins.treatment) > insightClicksPer1k(ins.control)
+              ? ins.treatment : ins.control;
+            return (
+              <span className="font-mono text-[10px] text-success">
+                {insightClicksPer1k(best)}
+              </span>
+            );
+          })()}
+          {h.status === "testing" && (
+            <span className="font-mono text-[10px] text-primary">Tracking</span>
+          )}
         </div>
         <DerivedFromLine h={h} />
       </button>

@@ -120,7 +120,7 @@ function CandidateCard({
         <p className="text-xs text-muted-foreground">{candidate.whyThisFollows}</p>
       </div>
       <div className="mt-auto flex flex-wrap gap-2">
-        <Button size="sm" className="flex-1 gap-1" onClick={() => onAdd(candidate)} disabled={dismissed}>
+        <Button size="sm" variant={isRecommended ? "default" : "outline"} className="flex-1 gap-1" onClick={() => onAdd(candidate)} disabled={dismissed}>
           {alreadyAdded ? "View in Research" : "Review Hypothesis"}
           <ArrowRight className="size-3.5" />
         </Button>
@@ -170,6 +170,7 @@ function InsightDetail({ insight }: { insight: Insight }) {
           <span className="rounded bg-[#ECFDF5] px-1.5 py-0.5 text-success">Completed</span>
         </div>
         <h2 className="text-2xl font-semibold tracking-tight">{insight.experimentName}</h2>
+        <p className="text-sm text-muted-foreground">What did we learn and what should we test next?</p>
         <div className="grid grid-cols-3 gap-3 border-t border-border pt-3 text-sm">
           <div className="flex flex-col gap-0.5">
             <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Primary Metric</span>

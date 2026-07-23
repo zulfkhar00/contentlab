@@ -142,8 +142,11 @@ export default function OverviewPage() {
 
   const publishedVideos = getPublishedCount(experiment.variants);
   const completedExperiments = SEED_INSIGHTS.length;
-  const productClicks = totalProductClicks();
-  const activeThreads = 1; // one experiment at a time in the current model
+  const productClicks = experiment.variants.reduce(
+    (sum, v) => sum + (v.metrics?.clicks ?? 0),
+    0,
+  ) || totalProductClicks();
+  const activeThreads = hypotheses.filter((h) => h.status === "testing").length || 1;
   const latestInsight = pickLatestInsight();
   const nextAction = computeNextAction(experiment, latestInsight);
   const currentQuestion = findCurrentResearchQuestion(experiment, hypotheses);
@@ -179,28 +182,6 @@ export default function OverviewPage() {
           <span className="font-mono text-2xl font-semibold">{activeThreads}</span>
         </div>
       </div>
-
-      <section
-        data-testid="next-action-card"
-        className="flex flex-col gap-3 border border-l-4 border-border border-l-primary bg-card p-6"
-      >
-        <div className="flex items-center gap-2">
-          <Play className="size-5 text-primary" />
-          <MonoLabel>Next Action</MonoLabel>
-        </div>
-        <h3 className="text-2xl font-semibold tracking-tight">{nextAction.title}</h3>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          {nextAction.description}
-        </p>
-        {nextAction.cta && (
-          <Button asChild className="mt-2 w-fit gap-2">
-            <Link href={nextAction.cta.href}>
-              {nextAction.cta.label}
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-        )}
-      </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <section
@@ -284,6 +265,28 @@ export default function OverviewPage() {
           )}
         </section>
       </div>
+
+      <section
+        data-testid="next-action-card"
+        className="flex flex-col gap-3 border border-l-4 border-border border-l-primary bg-card p-6"
+      >
+        <div className="flex items-center gap-2">
+          <Play className="size-5 text-primary" />
+          <MonoLabel>Next Action</MonoLabel>
+        </div>
+        <h3 className="text-2xl font-semibold tracking-tight">{nextAction.title}</h3>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {nextAction.description}
+        </p>
+        {nextAction.cta && (
+          <Button asChild className="mt-2 w-fit gap-2">
+            <Link href={nextAction.cta.href}>
+              {nextAction.cta.label}
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        )}
+      </section>
 
       <section
         data-testid="research-backlog"

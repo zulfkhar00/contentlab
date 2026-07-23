@@ -2,26 +2,21 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, ExternalLink, Link2, Rocket } from "lucide-react";
+import { Search, ExternalLink, Link2, Rocket, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   useExperiment,
   variantStatusLabel,
   variantStatusTone,
+  getExperimentStatus,
+  getPublishedCount,
   clicksPer1k,
   formatTimestamp,
   getTrackingWindow,
   type Variant,
   type VariantRole,
 } from "@/lib/experiment";
-
-const KPIS = [
-  { label: "Published Videos", value: "12" },
-  { label: "Currently Tracking", value: "3" },
-  { label: "Total Views", value: "45.2K" },
-  { label: "Avg Clicks / 1K Views", value: "26.5" },
-];
 
 const FILTERS = ["All", "Tracking", "Completed"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -69,18 +64,42 @@ export default function VideosPage() {
   // computation past hydration, where there's nothing to diff against.
   if (!loaded) return null;
 
+  const publishedCount = getPublishedCount(experiment.variants);
+  const trackingCount = experiment.variants.filter((v) => v.status === "tracking").length;
+  const totalViews = experiment.variants.reduce((s, v) => s + (v.metrics?.views ?? 0), 0);
+  const totalClicksForAvg = experiment.variants.reduce((s, v) => s + (v.metrics?.clicks ?? 0), 0);
+  const avgClicksPer1k = totalViews > 0 ? clicksPer1k(totalViews, totalClicksForAvg) : 0;
+  const expStatus = getExperimentStatus(experiment.variants);
+
+  const liveKpis = [
+    { label: "Published Videos", value: String(publishedCount) },
+    { label: "Currently Tracking", value: String(trackingCount) },
+    { label: "Total Views", value: totalViews >= 1000 ? (totalViews / 1000).toFixed(1) + "K" : String(totalViews) },
+    { label: "Avg Clicks / 1K Views", value: String(avgClicksPer1k) },
+  ];
+
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Videos</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Inspect published variants, tracking snapshots, and product-click
-          attribution across experiments.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-2xl font-semibold tracking-tight">Videos</h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            How are the published variants performing?
+          </p>
+        </div>
+        {expStatus !== "ready" && (
+          <Button asChild className="shrink-0 gap-2">
+            {expStatus === "tracking" ? (
+              <Link href="/experiments">Go to Workspace <ArrowRight className="size-4" /></Link>
+            ) : (
+              <Link href="/insights">Review Results <ArrowRight className="size-4" /></Link>
+            )}
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {KPIS.map((k) => (
+        {liveKpis.map((k) => (
           <div key={k.label} className="border border-border bg-card p-4">
             <div className="mb-1 font-mono text-xs uppercase tracking-wide text-muted-foreground">
               {k.label}

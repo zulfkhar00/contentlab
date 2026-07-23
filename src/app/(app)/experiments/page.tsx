@@ -280,20 +280,29 @@ export default function ExperimentWorkspacePage() {
                   <p className="text-sm">{v.variableUnderTest}</p>
                 </div>
                 {v.status === "completed" && v.metrics && (
-                  <div className="grid grid-cols-2 gap-2 border border-border bg-secondary p-2 font-mono text-xs">
-                    <div className="flex flex-col">
-                      <MonoLabel>Views</MonoLabel>
-                      <span>{v.metrics.views.toLocaleString()}</span>
+                  <div className="flex flex-col gap-1 border border-border bg-secondary p-2 font-mono text-xs">
+                    <div className="flex items-center gap-1 border-b border-border pb-1">
+                      <MonoLabel>Testing:</MonoLabel>
+                      <span className="truncate text-[10px]">{v.variableUnderTest}</span>
                     </div>
-                    <div className="flex flex-col">
-                      <MonoLabel>Clicks / 1K</MonoLabel>
-                      <span>{clicksPer1k(v.metrics.views, v.metrics.clicks)}</span>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="flex flex-col">
+                        <MonoLabel>Views</MonoLabel>
+                        <span>{v.metrics.views.toLocaleString()}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <MonoLabel>Clicks / 1K</MonoLabel>
+                        <span>{clicksPer1k(v.metrics.views, v.metrics.clicks)}</span>
+                      </div>
                     </div>
                   </div>
                 )}
                 {v.status === "tracking" && (
                   <div className="flex flex-col gap-1 border border-border bg-secondary p-2 text-xs">
-                    <MonoLabel>Tracking</MonoLabel>
+                    <div className="flex items-center gap-1">
+                      <MonoLabel>Testing:</MonoLabel>
+                      <span className="truncate text-[10px] text-muted-foreground">{v.variableUnderTest}</span>
+                    </div>
                     <span>
                       {hoursLeft === null
                         ? "Tracking window active"
