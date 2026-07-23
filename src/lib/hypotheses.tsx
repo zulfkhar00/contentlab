@@ -8,7 +8,45 @@ import {
   type ReactNode,
 } from "react";
 
-export type Status = "generated" | "approved" | "testing" | "tested" | "rejected";
+// core_ideas.md vocabulary:
+// - "suggested": AI just proposed this, user hasn't opened it yet
+// - "draft":     user is editing but hasn't approved the experiment logic
+// - "approved":  experiment logic locked; variants can be generated
+// - "testing":   experiment is running (variants in tracking)
+// - "learned":   experiment completed; an Insight exists for it
+// - "rejected":  user dismissed
+//
+// The pair (suggested, draft) split what was formerly "generated". "learned"
+// replaces "tested" — the doc is deliberate about calling the terminal state
+// what the product actually produced (a learning), not that a test happened.
+export type Status =
+  | "suggested"
+  | "draft"
+  | "approved"
+  | "testing"
+  | "learned"
+  | "rejected";
+
+// core_ideas.md §"How the next hypothesis should be generated": every
+// follow-up hypothesis relates to its parent through exactly one of these
+// six relationships. Unset on cold-start hypotheses that aren't derived from
+// prior evidence.
+export type HypothesisRelationship =
+  | "replication"
+  | "mechanism-isolation"
+  | "parameter-optimization"
+  | "generalization"
+  | "counter-hypothesis"
+  | "recovery-redesign";
+
+export const RELATIONSHIP_LABEL: Record<HypothesisRelationship, string> = {
+  replication: "Replication",
+  "mechanism-isolation": "Mechanism Isolation",
+  "parameter-optimization": "Parameter Optimization",
+  generalization: "Generalization",
+  "counter-hypothesis": "Counter-hypothesis",
+  "recovery-redesign": "Recovery / Redesign",
+};
 
 export type Hypothesis = {
   id: string;
@@ -22,15 +60,54 @@ export type Hypothesis = {
   // absent on cold-start/"Generate More" hypotheses, which have no prior
   // evidence to trace back to.
   parentInsightId?: string;
+
+  // Experiment-design fields introduced by core_ideas.md §"Stage 2:
+  // Generate the hypothesis". All optional so old hypotheses (and the
+  // localStorage payload from before this shim) still parse. Later screens
+  // (Hypothesis Review, Experiment Workspace) will fill these in for every
+  // new hypothesis; the seeds below start populating them so downstream
+  // screens have real content to render.
+  researchQuestion?: string;
+  independentVariable?: string;
+  controlCondition?: string;
+  treatmentCondition?: string;
+  controlledElements?: string[];
+  contradictionCondition?: string;
+
+  // Lineage fields for follow-ups derived from a previous experiment.
+  relationshipType?: HypothesisRelationship;
+  previousLearning?: string;
+  remainingUnknown?: string;
 };
 
 export const STATUS_LABEL: Record<Status, string> = {
-  generated: "Generated",
+  suggested: "Suggested",
+  draft: "Draft",
   approved: "Approved",
   testing: "Testing",
-  tested: "Tested",
+  learned: "Learned",
   rejected: "Rejected",
 };
+
+// Migrate legacy status values persisted before the vocabulary shift.
+// "generated" was the AI-drafted default → maps to "suggested"; "tested"
+// meant "we ran the experiment and have a result" → maps to "learned".
+type LegacyStatus = "generated" | "tested";
+const LEGACY_STATUS_MAP: Record<LegacyStatus, Status> = {
+  generated: "suggested",
+  tested: "learned",
+};
+
+function migrateStatus(raw: string): Status {
+  if (raw in LEGACY_STATUS_MAP) {
+    return LEGACY_STATUS_MAP[raw as LegacyStatus];
+  }
+  return raw as Status;
+}
+
+function migrateHypothesis(h: Hypothesis): Hypothesis {
+  return { ...h, status: migrateStatus(h.status as string) };
+}
 
 export const SEED_HYPOTHESES: Hypothesis[] = [
   {
@@ -42,6 +119,21 @@ export const SEED_HYPOTHESES: Hypothesis[] = [
     primaryMetric: "Clicks / 1K Views",
     rationale: "Pain-first content creates relevance before introducing the product.",
     status: "approved",
+    researchQuestion: "Which opening framing generates more product clicks?",
+    independentVariable: "Opening framing",
+    controlCondition: "Direct product feature demo opening",
+    treatmentCondition: "Founder pain-story opening",
+    controlledElements: [
+      "Audience",
+      "Founder-led talking head",
+      "Duration",
+      "Product explanation",
+      "Offer",
+      "CTA",
+      "Caption format",
+    ],
+    contradictionCondition:
+      "The pain-story treatment does not outperform the product-demo control after all tracking windows complete.",
   },
   {
     id: "h2",
@@ -52,6 +144,22 @@ export const SEED_HYPOTHESES: Hypothesis[] = [
     primaryMetric: "Clicks / 1K Views",
     rationale: "Concrete failure stories build more trust than generic pitches.",
     status: "testing",
+    researchQuestion: "Which opening style generates more product clicks?",
+    independentVariable: "Opening angle",
+    controlCondition: "Product-demo opening",
+    treatmentCondition: "Concrete founder-failure opening",
+    controlledElements: [
+      "Audience",
+      "Founder-led talking head",
+      "Duration",
+      "Product explanation",
+      "Offer",
+      "CTA",
+      "Caption format",
+      "Publishing account",
+    ],
+    contradictionCondition:
+      "The founder-failure treatment does not outperform the product-demo control after all tracking windows complete.",
   },
   {
     id: "h3",
@@ -62,7 +170,21 @@ export const SEED_HYPOTHESES: Hypothesis[] = [
     primaryMetric: "Clicks / 1K Views",
     rationale:
       "Distribution failure is more emotionally relevant to technical founders than generic AI benefits.",
-    status: "generated",
+    status: "suggested",
+    researchQuestion: "Which pain framing resonates most with technical founders?",
+    independentVariable: "Pain framing",
+    controlCondition: "Generic AI automation benefits framing",
+    treatmentCondition: "Distribution-problem framing",
+    controlledElements: [
+      "Audience",
+      "Founder-led talking head",
+      "Duration",
+      "Product explanation",
+      "Offer",
+      "CTA",
+    ],
+    contradictionCondition:
+      "The distribution-problem framing does not outperform the AI automation framing after all tracking windows complete.",
   },
   {
     id: "h4",
@@ -73,7 +195,22 @@ export const SEED_HYPOTHESES: Hypothesis[] = [
     primaryMetric: "Comments / 1K Views",
     rationale:
       "Personal narratives build community trust more effectively than polished pitches.",
-    status: "generated",
+    status: "suggested",
+    researchQuestion:
+      "Which style of storytelling generates more product-related comments?",
+    independentVariable: "Storytelling style",
+    controlCondition: "Polished product pitch",
+    treatmentCondition: "Founder journey narrative",
+    controlledElements: [
+      "Audience",
+      "Founder-led talking head",
+      "Duration",
+      "Product explanation",
+      "Offer",
+      "CTA",
+    ],
+    contradictionCondition:
+      "The founder-journey treatment does not outperform the polished-pitch control on comments / 1K views after all tracking windows complete.",
   },
   {
     id: "h5",
@@ -83,7 +220,21 @@ export const SEED_HYPOTHESES: Hypothesis[] = [
     category: "Product / Feature",
     primaryMetric: "Clicks / 1K Views",
     rationale: "Shorter hooks reduce drop-off before the CTA is shown.",
-    status: "tested",
+    status: "learned",
+    researchQuestion: "Does opening length affect click efficiency?",
+    independentVariable: "Opening length and structure",
+    controlCondition: "Long-form narrative opening",
+    treatmentCondition: "Short pain-first hook",
+    controlledElements: [
+      "Audience",
+      "Founder-led talking head",
+      "Duration",
+      "Product explanation",
+      "Offer",
+      "CTA",
+    ],
+    contradictionCondition:
+      "The short pain-first hook does not outperform the long-form opening after all tracking windows complete.",
   },
   {
     id: "h6",
@@ -94,6 +245,9 @@ export const SEED_HYPOTHESES: Hypothesis[] = [
     primaryMetric: "Views",
     rationale: "Sound trends are noisy and don't isolate the message variable.",
     status: "rejected",
+    // Rejected because it fails core_ideas.md's controlled-experiment rule:
+    // it changes format AND is orthogonal to the message variable being
+    // tested elsewhere in the thread.
   },
 ];
 
@@ -104,7 +258,10 @@ function load(): Hypothesis[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Hypothesis[];
+    // Legacy-status migration runs every load. It's idempotent — statuses
+    // already in the new vocabulary pass through untouched.
+    return parsed.map(migrateHypothesis);
   } catch {
     return [];
   }
@@ -127,10 +284,10 @@ type HypothesesContextValue = {
 const Ctx = createContext<HypothesesContextValue | null>(null);
 
 // TODO(api): replace localStorage with real hypothesis endpoints once the
-// backend exists. A single provider (mirroring CampaignProvider) keeps
-// Overview, Hypotheses, and Insights showing one consistent, live list
-// instead of each holding its own stale copy — needed so a follow-up
-// hypothesis drafted from an Insight actually shows up on the Hypotheses page.
+// backend exists. A single provider (mirroring ExperimentProvider) keeps
+// Overview, Research, and Insights showing one consistent, live list —
+// needed so a follow-up hypothesis drafted from an Insight actually shows
+// up on the Research page.
 export function HypothesesProvider({ children }: { children: ReactNode }) {
   const [hypotheses, setHypotheses] = useState<Hypothesis[]>([]);
   const [loaded, setLoaded] = useState(false);

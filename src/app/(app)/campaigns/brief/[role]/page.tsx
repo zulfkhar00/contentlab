@@ -1,19 +1,30 @@
 "use client";
 
+// Screen 5 (Variant Review + Recording Brief) per actionable_ui_ux_changes.md
+// section 7. Answers: "Can the founder execute this variant while preserving
+// the experiment design?".
+
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Copy, Check, FileText, Sparkles, Play } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  ClipboardCheck,
+  Copy,
+  FileText,
+  ShieldAlert,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  useCampaign,
+  useExperiment,
   getVariant,
   getNextActionVariant,
   variantStatusLabel,
-  variantStatusTone,
   isValidTiktokUrl,
   type Variant,
   type VariantRole,
@@ -21,109 +32,74 @@ import {
 } from "@/lib/campaign";
 import { useProjectContext } from "@/lib/project-context";
 
-const SCRIPT_ROWS = [
-  { time: "00–02s", segment: "Hook", tag: "VARIABLE" as const },
-  { time: "02–07s", segment: "Context", tag: "VARIABLE" as const },
-  { time: "07–25s", segment: "Lesson", tag: "LOCKED" as const },
-  { time: "25–40s", segment: "Product", tag: "LOCKED" as const },
-  { time: "40–50s", segment: "CTA", tag: "LOCKED" as const },
+type ScriptTag = "VARIABLE" | "CONTROLLED";
+const SCRIPT_ROWS: Array<{ time: string; segment: string; tag: ScriptTag }> = [
+  { time: "0–5s",  segment: "Hook",    tag: "VARIABLE" },
+  { time: "5–15s", segment: "Context", tag: "VARIABLE" },
+  { time: "15–30s", segment: "Lesson", tag: "CONTROLLED" },
+  { time: "30–42s", segment: "Product", tag: "CONTROLLED" },
+  { time: "42–48s", segment: "CTA",    tag: "CONTROLLED" },
 ];
 
-const RECORDING_CHECKLIST = [
-  "Vertical orientation (9:16)",
-  "Same framing and background as other variants",
-  "Look into camera",
-  "Clear front lighting and audio",
-  "Record hook 3 times",
-  "Keep duration within 45–50s",
-];
-
-const EDITING_CHECKLIST = [
-  "Cut long pauses",
-  "Add auto-captions",
-  "Keep captions to 3–6 words per line",
-  "Use the same caption style as other variants",
-  "Emphasize only key phrases",
-  "Avoid extra B-roll unless consistent across variants",
-];
-
-const PUBLISHING_CHECKLIST = [
-  "Use the fixed campaign CTA",
-  "Publish manually on TikTok",
+const RECORDING_GUIDE: Array<{ label: string; value: string }> = [
+  { label: "Camera",          value: "Eye level, medium close-up" },
+  { label: "Delivery",        value: "Calm, direct, slightly reflective" },
+  { label: "Background",      value: "Use the same environment as other variants" },
+  { label: "Duration Target", value: "45–50 seconds" },
 ];
 
 const QUICK_ACTIONS = ["Make it punchier", "Shorten", "More vulnerable", "More casual"];
 
-// TODO(ai): replace with a real Claude API call once the AI service exists
-// (see CONTENT_LAB_PLAN.md phase 3/5). This deterministic transform stands
-// in for brief rewriting until that's wired up.
 function craftBriefRevision(v: Variant, instruction: string): VariantBriefEdit {
   const trimmed = instruction.trim();
-  const angle = trimmed || "a sharper, more specific angle";
+  const framing = trimmed || "a sharper hook";
   const base = v.hook.replace(/\.$/, "");
   return {
-    hook: `${base}, reframed around ${angle}.`,
-    hookDeliveryNote: trimmed
-      ? `Deliver with ${angle}.`
-      : v.hookDeliveryNote,
+    hook: base + ", reframed around " + framing + ".",
+    hookDeliveryNote: trimmed ? "Deliver with " + framing + "." : v.hookDeliveryNote,
     context: v.context,
     onScreenText: v.onScreenText,
   };
 }
 
-function ChecklistCard({
-  icon: Icon,
-  title,
-  items,
-  checked,
-  onToggle,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  items: string[];
-  checked: Record<number, boolean>;
-  onToggle: (i: number) => void;
-  children?: React.ReactNode;
-}) {
+function TagPill({ tag }: { tag: ScriptTag }) {
   return (
-    <div className="flex flex-col border border-border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="size-4 text-muted-foreground" />
-        <h4 className="font-mono text-xs uppercase tracking-wide">{title}</h4>
-      </div>
-      <ul className="flex flex-1 flex-col gap-2">
-        {items.map((item, i) => (
-          <li key={item} className="flex items-start gap-2">
-            <Checkbox
-              className="mt-0.5"
-              checked={!!checked[i]}
-              onCheckedChange={() => onToggle(i)}
-            />
-            <span className="text-sm text-muted-foreground">{item}</span>
-          </li>
-        ))}
-      </ul>
-      {children}
-    </div>
+    <span
+      className={"rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide " + (
+        tag === "VARIABLE"
+          ? "bg-primary text-primary-foreground"
+          : "border border-border bg-secondary text-muted-foreground"
+      )}
+    >
+      {tag}
+    </span>
   );
 }
 
+function MonoLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+type ApprovalStage = "pending" | "approved" | "recorded" | "published";
+
 export default function RecordingBriefPage() {
   const params = useParams<{ role: string }>();
-  const { campaign, startTracking, updateVariantBrief } = useCampaign();
+  const { experiment, startTracking, updateVariantBrief } = useExperiment();
   const { context: projectContext } = useProjectContext();
-  const variant = getVariant(campaign, params.role);
-  const nextVariant = getNextActionVariant(campaign.variants);
+  const variant = getVariant(experiment, params.role);
+  const nextVariant = getNextActionVariant(experiment.variants);
 
-  const [recordingChecked, setRecordingChecked] = useState<Record<number, boolean>>({});
-  const [editingChecked, setEditingChecked] = useState<Record<number, boolean>>({});
-  const [publishingChecked, setPublishingChecked] = useState<Record<number, boolean>>({});
   const [urlDraft, setUrlDraft] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
   const [revision, setRevision] = useState<VariantBriefEdit | null>(null);
+  const [stage, setStage] = useState<ApprovalStage>("pending");
+  const [factState, setFactState] = useState<"unknown" | "confirmed" | "flagged">("unknown");
 
   if (!variant) {
     return (
@@ -134,7 +110,7 @@ export default function RecordingBriefPage() {
         <Button asChild variant="outline" className="w-fit gap-2">
           <Link href="/campaigns">
             <ArrowLeft className="size-4" />
-            Back to Campaign
+            Back to Experiment
           </Link>
         </Button>
       </div>
@@ -145,11 +121,11 @@ export default function RecordingBriefPage() {
   const isLive = variant.status === "tracking" || variant.status === "completed";
 
   const scriptContent: Record<string, { text: string; note?: string }> = {
-    Hook: { text: variant.hook, note: variant.hookDeliveryNote },
+    Hook:    { text: variant.hook, note: variant.hookDeliveryNote },
     Context: { text: variant.context },
-    Lesson: { text: campaign.script.lesson },
-    Product: { text: campaign.script.product },
-    CTA: { text: campaign.script.cta },
+    Lesson:  { text: experiment.script.lesson },
+    Product: { text: experiment.script.product },
+    CTA:     { text: experiment.script.cta },
   };
 
   function copy(label: string, text: string) {
@@ -159,67 +135,54 @@ export default function RecordingBriefPage() {
   }
 
   function copyScript() {
-    const text = SCRIPT_ROWS.map(
-      (r) => `${r.segment} (${r.time}): "${scriptContent[r.segment].text}"`,
-    ).join("\n");
+    const text = SCRIPT_ROWS.map((r) => {
+      const body = scriptContent[r.segment].text;
+      return r.segment + " (" + r.time + ") [" + r.tag + "]: \"" + body + "\"";
+    }).join("\n");
     copy("script", text);
   }
 
   function submitUrl(role: VariantRole) {
     const trimmed = urlDraft.trim();
     if (!isValidTiktokUrl(trimmed)) {
-      setUrlError("Paste a valid TikTok video URL (https://tiktok.com/...).");
+      setUrlError("Paste a valid TikTok video URL (https://tiktok.com/...).".replace("XX","XX"));
       return;
     }
     setUrlError(null);
     startTracking(role, trimmed);
     setUrlDraft("");
+    setStage("published");
   }
 
   function rewriteBrief() {
     setRevision(craftBriefRevision(variant!, instruction));
   }
-
   function applyRevision() {
     if (!revision) return;
     updateVariantBrief(variant!.role, revision);
     setRevision(null);
     setInstruction("");
   }
-
-  function discardRevision() {
-    setRevision(null);
-  }
+  function discardRevision() { setRevision(null); }
 
   return (
     <>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
-          <Link
-            href="/campaigns"
-            className="flex items-center gap-1 hover:text-foreground"
-          >
+          <Link href="/campaigns" className="flex items-center gap-1 hover:text-foreground">
             <ArrowLeft className="size-3.5" />
-            Back to Campaign
+            Back to Experiment
           </Link>
           <span className="text-border">/</span>
           <span>Variant {variant.role}</span>
         </div>
-        <span
-          className={`rounded px-2.5 py-1 font-mono text-xs uppercase tracking-wide ${
-            variantStatusTone(variant.status) === "active"
-              ? "border border-success/20 bg-[#ECFDF5] text-success"
-              : "border border-border bg-card text-muted-foreground"
-          }`}
-        >
+        <span className="rounded border border-border bg-card px-2.5 py-1 font-mono text-xs uppercase tracking-wide text-muted-foreground">
           {variantStatusLabel(variant.status)}
         </span>
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          Campaign: {campaign.name}
-        </span>
+        <MonoLabel>Experiment: {experiment.name}</MonoLabel>
         <span className="w-fit rounded border border-border bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
           {variant.roleLabel}
         </span>
@@ -228,327 +191,203 @@ export default function RecordingBriefPage() {
         </h2>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Main canvas */}
-        <div className="flex flex-col gap-6 lg:col-span-9">
-          {/* The Hook */}
-          <div className="border border-border bg-card p-6">
-            <div className="mb-4 flex items-center gap-2 border-b border-border pb-3">
-              <FileText className="size-5" />
-              <h3 className="font-mono text-xs uppercase">The Hook</h3>
-            </div>
-            <p className="text-lg font-semibold leading-relaxed">
-              &quot;{variant.hook}&quot;
-            </p>
-          </div>
+      <section data-testid="experiment-context" className="grid grid-cols-1 gap-3 border border-border bg-card p-5 md:grid-cols-3">
+        <div className="flex flex-col gap-1">
+          <MonoLabel>Variable Under Test</MonoLabel>
+          <span className="text-sm">Opening framing</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <MonoLabel>This Variant Changes</MonoLabel>
+          <span className="text-sm">{variant.variableUnderTest}</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <MonoLabel>Keep Controlled</MonoLabel>
+          <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+            <li>Audience: {projectContext.targetAudience}</li>
+            <li>Format: Talking head</li>
+            <li>Duration: 45–50s</li>
+            <li>CTA: {experiment.cta}</li>
+          </ul>
+        </div>
+      </section>
 
-          {/* Script sequence */}
-          <div className="border border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border bg-secondary px-4 py-3">
-              <h3 className="font-mono text-xs uppercase">Script Sequence</h3>
-              <span className="font-mono text-xs text-muted-foreground">
-                Target Duration: {campaign.script.targetDurationLabel}
-              </span>
-            </div>
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr>
-                  <th className="w-24 border-b border-border p-4 font-mono text-xs text-muted-foreground">
-                    Time
-                  </th>
-                  <th className="w-32 border-b border-border p-4 font-mono text-xs text-muted-foreground">
-                    Segment
-                  </th>
-                  <th className="border-b border-border p-4 font-mono text-xs text-muted-foreground">
-                    Content / Delivery Notes
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border text-sm">
-                {SCRIPT_ROWS.map((row) => {
-                  const content = scriptContent[row.segment];
-                  return (
-                    <tr key={row.segment} className="hover:bg-secondary/50">
-                      <td className="p-4 align-top font-mono text-xs text-muted-foreground">
-                        {row.time}
-                      </td>
-                      <td className="p-4 align-top">
-                        <div className="flex flex-col gap-1">
-                          <span className="w-fit rounded bg-secondary px-2 py-1 text-xs font-medium">
-                            {row.segment}
-                          </span>
-                          <span className="font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                            {row.tag === "VARIABLE"
-                              ? "Variable"
-                              : "Locked Across Variants"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4 align-top">
-                        &quot;{content.text}&quot;
-                        {content.note && (
-                          <span className="mt-1 block text-sm italic text-muted-foreground">
-                            {content.note}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <section data-testid="script-editor" className="flex flex-col border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border bg-secondary p-3">
+          <div className="flex items-center gap-2">
+            <FileText className="size-4 text-muted-foreground" />
+            <MonoLabel>Script</MonoLabel>
           </div>
-
-          {/* Checklists */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <ChecklistCard
-              icon={Play}
-              title="Recording"
-              items={RECORDING_CHECKLIST}
-              checked={recordingChecked}
-              onToggle={(i) =>
-                setRecordingChecked((c) => ({ ...c, [i]: !c[i] }))
-              }
-            />
-            <ChecklistCard
-              icon={FileText}
-              title="Editing"
-              items={EDITING_CHECKLIST}
-              checked={editingChecked}
-              onToggle={(i) => setEditingChecked((c) => ({ ...c, [i]: !c[i] }))}
-            >
-              <div className="mt-4 border-t border-border pt-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <FileText className="size-4 text-muted-foreground" />
-                  <h4 className="font-mono text-xs uppercase tracking-wide">
-                    On-Screen Text
-                  </h4>
+          <Button size="sm" variant="outline" className="gap-1 font-mono text-xs" onClick={copyScript}>
+            {copied === "script" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            {copied === "script" ? "Copied!" : "Copy Script"}
+          </Button>
+        </div>
+        <ul className="flex flex-col">
+          {SCRIPT_ROWS.map((r) => (
+            <li key={r.segment} className="flex flex-col gap-2 border-b border-border p-4 last:border-b-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs text-muted-foreground">{r.time}</span>
+                  <span className="text-sm font-semibold">{r.segment}</span>
                 </div>
-                <div className="mb-3">
-                  <span className="mb-1 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Opening Text
-                  </span>
-                  <div className="border border-border bg-secondary p-2 text-sm">
-                    &quot;{variant.onScreenText}&quot;
-                  </div>
-                </div>
-                <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
-                  <li>Auto-captions</li>
-                  <li>3–6 words per line</li>
-                  <li>Same font and placement across variants</li>
-                </ul>
+                <TagPill tag={r.tag} />
               </div>
-            </ChecklistCard>
-            <ChecklistCard
-              icon={FileText}
-              title="Publishing"
-              items={PUBLISHING_CHECKLIST}
-              checked={publishingChecked}
-              onToggle={(i) =>
-                setPublishingChecked((c) => ({ ...c, [i]: !c[i] }))
-              }
-            />
-          </div>
-
-          {/* Tracking action */}
-          <div className="flex flex-col items-end gap-4 border border-border bg-card p-5 md:flex-row">
-            {isLive ? (
-              <p className="flex-1 text-sm text-muted-foreground">
-                This variant is already tracking.{" "}
-                <Link href="/videos" className="font-medium text-foreground underline">
-                  View metrics
-                </Link>
-                .
+              <p className={r.tag === "VARIABLE" ? "border-l-2 border-primary py-1 pl-3 text-sm" : "border-l-2 border-border py-1 pl-3 text-sm text-muted-foreground"}>
+                &quot;{scriptContent[r.segment].text}&quot;
               </p>
-            ) : isNext ? (
-              <>
-                <div className="w-full flex-1">
-                  <label className="mb-2 block font-mono text-xs text-foreground">
-                    Track Distribution Performance
-                  </label>
+              {scriptContent[r.segment].note && (
+                <p className="pl-3 text-xs italic text-muted-foreground">{scriptContent[r.segment].note}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section data-testid="founder-fact-check" className="flex flex-col gap-3 border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="size-4 text-muted-foreground" />
+          <MonoLabel>Founder Fact Check</MonoLabel>
+        </div>
+        <p className="text-sm">The script says: &quot;{variant.hook}&quot;</p>
+        <p className="text-xs text-muted-foreground">Is this accurate? Confirm or edit it — the AI must not invent stories.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant={factState === "confirmed" ? "default" : "outline"} className="gap-1" onClick={() => setFactState("confirmed")}>
+            <Check className="size-3.5" /> Yes, accurate
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { setInstruction("Rewrite the hook so the facts match what really happened."); setFactState("flagged"); }}>
+            Edit hook
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setFactState("flagged")}>Remove claim</Button>
+        </div>
+        {factState === "flagged" && (
+          <p className="text-xs text-muted-foreground">Flagged. Use the AI Brief Editor to rewrite the hook without inventing details.</p>
+        )}
+      </section>
+
+      <section data-testid="recording-guide" className="flex flex-col gap-3 border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <Camera className="size-4 text-muted-foreground" />
+          <MonoLabel>Recording Guide</MonoLabel>
+          <span className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Advisory</span>
+        </div>
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {RECORDING_GUIDE.map((g) => (
+            <li key={g.label} className="flex flex-col gap-1 border border-border p-3">
+              <MonoLabel>{g.label}</MonoLabel>
+              <span className="text-sm">{g.value}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section data-testid="approval-strip" className="flex flex-col gap-3 border border-border bg-card p-5">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="size-4 text-muted-foreground" />
+          <MonoLabel>Approval</MonoLabel>
+        </div>
+        {isLive ? (
+          <p className="text-sm text-muted-foreground">This variant is already tracking. <Link href="/videos" className="font-medium text-foreground underline">View metrics</Link>.</p>
+        ) : isNext ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={stage === "pending" ? "default" : "outline"}
+                className="gap-1"
+                onClick={() => setStage(stage === "pending" ? "approved" : "pending")}
+              >
+                {stage !== "pending" ? <Check className="size-3.5" /> : null}
+                Approve for Recording
+              </Button>
+              {(stage === "approved" || stage === "recorded" || stage === "published") && (
+                <Button
+                  size="sm"
+                  variant={stage === "approved" ? "default" : "outline"}
+                  className="gap-1"
+                  onClick={() => setStage(stage === "approved" ? "recorded" : "approved")}
+                >
+                  {stage === "recorded" || stage === "published" ? <Check className="size-3.5" /> : null}
+                  I Have Recorded This Variant
+                </Button>
+              )}
+              {(stage === "recorded" || stage === "published") && (
+                <Button
+                  size="sm"
+                  variant={stage === "recorded" ? "default" : "outline"}
+                  className="gap-1"
+                >
+                  {stage === "published" ? <Check className="size-3.5" /> : null}
+                  I Have Published This Variant on TikTok
+                </Button>
+              )}
+            </div>
+            {stage === "recorded" && (
+              <div className="flex flex-col gap-1">
+                <MonoLabel>Paste TikTok URL to start tracking</MonoLabel>
+                <div className="flex gap-2">
                   <Input
                     value={urlDraft}
-                    onChange={(e) => {
-                      setUrlDraft(e.target.value);
-                      setUrlError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") submitUrl(variant.role);
-                    }}
+                    onChange={(e) => { setUrlDraft(e.target.value); setUrlError(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") submitUrl(variant.role); }}
                     placeholder="Paste TikTok URL..."
                   />
-                  {urlError && (
-                    <p className="mt-1 text-xs text-destructive">{urlError}</p>
-                  )}
+                  <Button onClick={() => submitUrl(variant.role)}>Start Tracking</Button>
                 </div>
-                <Button
-                  className="w-full gap-2 md:w-auto"
-                  onClick={() => submitUrl(variant.role)}
-                >
-                  <Play className="size-4" />
-                  Start Tracking
-                </Button>
-              </>
-            ) : (
-              <p className="flex-1 text-sm text-muted-foreground">
-                This variant isn&apos;t up next yet. Finish tracking the current
-                variant first.
-              </p>
+                {urlError && <p className="text-xs text-destructive">{urlError}</p>}
+              </div>
             )}
           </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">This variant isn&apos;t up next yet. Finish tracking the current variant first.</p>
+        )}
+      </section>
+
+      <section data-testid="ai-brief-editor" className="flex flex-col border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border bg-secondary p-3">
+          <Sparkles className="size-4" />
+          <h3 className="text-sm font-semibold">AI Brief Editor</h3>
         </div>
-
-        {/* Right sidebar */}
-        <div className="flex flex-col gap-4 lg:col-span-3">
-          <div className="flex flex-col gap-3 border border-border bg-card p-4">
-            <h4 className="border-b border-border pb-2 font-mono text-xs uppercase tracking-wide text-muted-foreground">
-              Experiment Context
-            </h4>
-            <div>
-              <span className="mb-1 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                Role
-              </span>
-              <span className="w-fit rounded border border-border bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                {variant.roleLabel}
-              </span>
-            </div>
-            <div>
-              <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                Variable Under Test
-              </span>
-              <span className="text-sm">{variant.variableUnderTest}</span>
-            </div>
-            <div>
-              <span className="mb-0.5 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                Primary Metric
-              </span>
-              <span className="text-sm">{campaign.primaryMetric}</span>
-            </div>
-            <div className="border-t border-border pt-2">
-              <span className="mb-1 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                Keep Constant
-              </span>
-              <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
-                <li>Audience: {projectContext.targetAudience}</li>
-                <li>Format: Talking head</li>
-                <li>Duration: 45–50s</li>
-                <li>CTA: {campaign.cta}</li>
-              </ul>
-            </div>
+        <div className="flex flex-col gap-4 p-4">
+          <p className="text-xs text-muted-foreground">Ask AI to rewrite the hook and delivery for this variant before you shoot.</p>
+          <div className="border border-border bg-background p-3">
+            <MonoLabel>Current Hook</MonoLabel>
+            <p className="mt-1 text-sm font-semibold">&quot;{variant.hook}&quot;</p>
           </div>
-
-          <div className="flex flex-col gap-2 border border-border bg-card p-4">
-            <h4 className="mb-1 border-b border-border pb-2 font-mono text-xs uppercase tracking-wide text-muted-foreground">
-              Quick Actions
-            </h4>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              onClick={() => copy("hook", variant.hook)}
-            >
-              {copied === "hook" ? (
-                <Check className="size-4" />
-              ) : (
-                <Copy className="size-4" />
-              )}
-              {copied === "hook" ? "Copied!" : "Copy Hook"}
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              onClick={copyScript}
-            >
-              {copied === "script" ? (
-                <Check className="size-4" />
-              ) : (
-                <FileText className="size-4" />
-              )}
-              {copied === "script" ? "Copied!" : "Copy Script"}
-            </Button>
-          </div>
-
-          {/* AI Brief Editor */}
-          <div className="flex flex-col border border-border bg-card">
-            <div className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-3">
-              <Sparkles className="size-4" />
-              <h3 className="text-sm font-semibold">AI Brief Editor</h3>
-            </div>
-            <div className="flex flex-col gap-4 p-4">
-              <p className="text-xs text-muted-foreground">
-                Ask AI to rewrite the hook and delivery for this variant before
-                you record.
-              </p>
-
-              <div className="relative border border-border bg-background p-3">
-                <span className="absolute -top-2 left-2 bg-card px-1 font-mono text-[10px] text-muted-foreground">
-                  CURRENT HOOK
-                </span>
-                <p className="text-sm font-semibold">&quot;{variant.hook}&quot;</p>
+          {revision && (
+            <div className="flex flex-col gap-2 border border-dashed border-primary p-3">
+              <MonoLabel>Proposed Revision</MonoLabel>
+              <p className="text-sm font-semibold leading-relaxed">&quot;{revision.hook}&quot;</p>
+              <p className="text-xs italic text-muted-foreground">{revision.hookDeliveryNote}</p>
+              <div className="mt-1 flex gap-2">
+                <Button size="sm" onClick={applyRevision} className="flex-1 font-mono text-[10px] uppercase">Apply</Button>
+                <Button size="sm" variant="outline" onClick={discardRevision} className="flex-1 font-mono text-[10px] uppercase">Discard</Button>
               </div>
-
-              {revision && (
-                <div className="relative flex flex-col gap-3 border border-dashed border-primary p-3">
-                  <span className="absolute -top-2 left-2 bg-card px-1 font-mono text-[10px] font-bold text-foreground">
-                    PROPOSED REVISION
-                  </span>
-                  <p className="text-sm font-semibold leading-relaxed">
-                    &quot;{revision.hook}&quot;
-                  </p>
-                  <p className="text-xs italic text-muted-foreground">
-                    {revision.hookDeliveryNote}
-                  </p>
-                  <div className="mt-1 flex gap-2">
-                    <Button
-                      size="sm"
-                      className="flex-1 font-mono text-[10px] uppercase"
-                      onClick={applyRevision}
-                    >
-                      Apply
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 font-mono text-[10px] uppercase"
-                      onClick={discardRevision}
-                    >
-                      Discard
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <Textarea
-                value={instruction}
-                onChange={(e) => setInstruction(e.target.value)}
-                placeholder="Ask AI to rewrite this hook..."
-                className="resize-none font-mono text-xs"
-                rows={3}
-              />
-
-              <div>
-                <span className="mb-2 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Quick Actions
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {QUICK_ACTIONS.map((qa) => (
-                    <button
-                      key={qa}
-                      onClick={() => setInstruction(qa)}
-                      className="rounded border border-border px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                    >
-                      {qa}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Button onClick={rewriteBrief} className="font-mono text-xs">
-                Rewrite Brief
-              </Button>
+            </div>
+          )}
+          <Textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            placeholder="Ask AI to rewrite this hook..."
+            className="resize-none font-mono text-xs"
+            rows={3}
+          />
+          <div>
+            <MonoLabel>Quick Actions</MonoLabel>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {QUICK_ACTIONS.map((qa) => (
+                <button
+                  key={qa}
+                  onClick={() => setInstruction(qa)}
+                  className="rounded border border-border px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  {qa}
+                </button>
+              ))}
             </div>
           </div>
+          <Button onClick={rewriteBrief} className="font-mono text-xs">Rewrite Brief</Button>
         </div>
-      </div>
+      </section>
     </>
   );
 }

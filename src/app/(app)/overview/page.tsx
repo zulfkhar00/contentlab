@@ -2,57 +2,31 @@
 
 import Link from "next/link";
 import {
-  Video,
-  ExternalLink,
   ArrowRight,
+  FlaskConical,
   Lightbulb,
+  Play,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  useCampaign,
-  getCampaignStatus,
-  campaignStatusLabel,
-  getPublishedCount,
+  useExperiment,
+  getExperimentStatus,
   getNextActionVariant,
+  getPublishedCount,
   variantStatusLabel,
-  variantStatusTone,
+  type ExperimentData,
 } from "@/lib/campaign";
-import { useHypotheses, STATUS_LABEL } from "@/lib/hypotheses";
-import { SEED_INSIGHTS, insightClicksPer1k } from "@/lib/insights";
-
-/* ---- Seed data not yet backed by a real store (account-wide video/click
-   history) — unrelated to the single active campaign above, so it stays as
-   illustrative seed content for now. Hypothesis Backlog and Recent Insights
-   below read from the real shared stores (lib/hypotheses, lib/insights). ---- */
-
-const KPIS = [
-  { label: "Total Videos", value: "12" },
-  { label: "Total Views", value: "45.2K" },
-  { label: "Total Clicks", value: "1.2K" },
-  { label: "Clicks / 1K Views", value: "26.5" },
-];
-
-/* ---- Small primitives ---- */
-
-function StatusPill({
-  children,
-  tone = "idle",
-}: {
-  children: React.ReactNode;
-  tone?: "active" | "idle";
-}) {
-  return (
-    <span
-      className={`rounded px-2 py-0.5 font-mono text-xs uppercase tracking-wide ${
-        tone === "active"
-          ? "bg-[#ECFDF5] text-success"
-          : "bg-secondary text-muted-foreground"
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
+import {
+  useHypotheses,
+  STATUS_LABEL,
+  type Hypothesis,
+} from "@/lib/hypotheses";
+import {
+  SEED_INSIGHTS,
+  insightClicksPer1k,
+  type Insight,
+} from "@/lib/insights";
 
 function MonoLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -62,223 +36,292 @@ function MonoLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ---- Page ---- */
+function StatusPill({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "active" | "idle" | "success";
+}) {
+  const style =
+    tone === "active"
+      ? "bg-primary text-primary-foreground"
+      : tone === "success"
+        ? "bg-[#ECFDF5] text-success"
+        : "border border-border bg-card text-muted-foreground";
+  return (
+    <span
+      className={`rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${style}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function variantTone(status: string): "active" | "idle" | "success" {
+  if (status === "completed") return "success";
+  if (status === "tracking") return "active";
+  return "idle";
+}
+
+type NextAction = {
+  title: string;
+  description: string;
+  cta: { label: string; href: string } | null;
+};
+
+function computeNextAction(
+  experiment: ExperimentData,
+  latestInsight: Insight | null,
+): NextAction {
+  const nextVariant = getNextActionVariant(experiment.variants);
+  const status = getExperimentStatus(experiment.variants);
+  if (nextVariant) {
+    return {
+      title: `Record Variant ${nextVariant.role}: ${nextVariant.title}`,
+      description:
+        "Script, hook, and checklist are ready. Record it and paste the URL after publishing.",
+      cta: {
+        label: "Open Recording Brief",
+        href: `/campaigns / brief / ${nextVariant.role.toLowerCase()}`.replaceAll(" ", ""),
+      },
+    };
+  }
+  if (status === "tracking" && latestInsight) {
+    return {
+      title: "Review Experiment Learning",
+      description:
+        "All three tracking windows are complete. Review the evidence and draft the next hypothesis.",
+      cta: {
+        label: "View Results",
+        href: `/insights?id=${latestInsight.id}`,
+      },
+    };
+  }
+  return {
+    title: "All variants are tracking",
+    description:
+      "Check back once each 72h tracking window completes to see the experiment insight.",
+    cta: null,
+  };
+}
+
+function pickLatestInsight(): Insight | null {
+  if (SEED_INSIGHTS.length === 0) return null;
+  return [...SEED_INSIGHTS].sort((a, b) =>
+    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+  )[0];
+}
+
+function totalProductClicks(): number {
+  return SEED_INSIGHTS.reduce(
+    (sum, i) => sum + i.control.clicks + i.treatment.clicks,
+    0,
+  );
+}
+
+function findCurrentResearchQuestion(
+  experiment: ExperimentData,
+  hypotheses: Hypothesis[],
+): string | null {
+  // Match the active experiment's hypothesis text against the Research
+  // Library so we can show the same "Which opening style ..." question the
+  // user drafted, without duplicating the field on ExperimentData yet.
+  const stmt = experiment.hypothesis.trim();
+  const match =
+    hypotheses.find((h) => h.statement.trim() === stmt) ??
+    hypotheses.find((h) => h.status === "testing");
+  return match?.researchQuestion ?? null;
+}
 
 export default function OverviewPage() {
-  const { campaign, loaded: campaignLoaded } = useCampaign();
+  const { experiment, loaded: experimentLoaded } = useExperiment();
   const { hypotheses, loaded: hypothesesLoaded } = useHypotheses();
-  const status = getCampaignStatus(campaign.variants);
-  const published = getPublishedCount(campaign.variants);
-  const nextVariant = getNextActionVariant(campaign.variants);
 
-  if (!campaignLoaded || !hypothesesLoaded) return null;
+  if (!experimentLoaded || !hypothesesLoaded) return null;
+
+  const publishedVideos = getPublishedCount(experiment.variants);
+  const completedExperiments = SEED_INSIGHTS.length;
+  const productClicks = totalProductClicks();
+  const activeThreads = 1; // one experiment at a time in the current model
+  const latestInsight = pickLatestInsight();
+  const nextAction = computeNextAction(experiment, latestInsight);
+  const currentQuestion = findCurrentResearchQuestion(experiment, hypotheses);
 
   const backlog = hypotheses
-    .filter((h) => h.status === "generated" || h.status === "approved")
-    .slice(0, 3);
+    .filter((h) => h.status === "suggested" || h.status === "draft" || h.status === "approved")
+    .slice(0, 4);
 
   return (
     <>
       <div className="mb-2 flex flex-col gap-2">
         <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          High-level metrics and active experimentation status.
+          What am I currently learning, and what should I do next?
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-        {/* Left column */}
-        <div className="flex flex-col gap-4 md:col-span-8">
-          {/* KPIs */}
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {KPIS.map((k) => (
-              <div
-                key={k.label}
-                className="flex h-28 flex-col justify-between border border-border bg-card p-4 transition-colors hover:bg-secondary"
-              >
-                <MonoLabel>{k.label}</MonoLabel>
-                <span className="font-mono text-xl font-semibold">
-                  {k.value}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-end px-1">
-            <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground/70">
-              Last updated 12 min ago
-            </span>
-          </div>
-
-          {/* Active campaign */}
-          <div className="flex flex-col border border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border bg-secondary p-4">
-              <h3 className="text-lg font-semibold tracking-tight">
-                Active Campaign: {campaign.name}
-              </h3>
-              <div className="flex items-center gap-2">
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="gap-1 font-mono text-xs"
-                >
-                  <Link href="/campaigns">
-                    <ExternalLink className="size-3.5" />
-                    Open Campaign
-                  </Link>
-                </Button>
-                <StatusPill tone={status === "ready" ? "idle" : "active"}>
-                  {campaignStatusLabel(status)}
-                </StatusPill>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-6 p-5">
-              <div className="flex flex-col gap-1">
-                <MonoLabel>Hypothesis Under Test</MonoLabel>
-                <p className="border-l-2 border-primary py-1 pl-3 text-sm font-medium">
-                  &quot;{campaign.hypothesis}&quot;
-                </p>
-              </div>
-
-              <div className="flex items-end justify-between border-b border-border pb-2">
-                <MonoLabel>Variants</MonoLabel>
-                <span className="rounded bg-secondary px-2 py-1 font-mono text-xs">
-                  Progress: {published}/3 variants published
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                {campaign.variants.map((v) => (
-                  <div
-                    key={v.role}
-                    className="flex items-center justify-between rounded border border-border p-3 transition-colors hover:bg-secondary"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`size-2 rounded-full ${
-                          variantStatusTone(v.status) === "active"
-                            ? "bg-success"
-                            : "bg-border"
-                        }`}
-                      />
-                      <span className="text-sm font-medium">
-                        Variant {v.role}: {v.title}
-                      </span>
-                    </div>
-                    <StatusPill tone={variantStatusTone(v.status)}>
-                      {variantStatusLabel(v.status)}
-                    </StatusPill>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="flex flex-col justify-between border border-border bg-card p-4">
+          <MonoLabel>Published Videos</MonoLabel>
+          <span className="font-mono text-2xl font-semibold">{publishedVideos}</span>
         </div>
-
-        {/* Right column */}
-        <div className="flex flex-col gap-4 md:col-span-4">
-          {/* Next action */}
-          <div className="flex flex-col gap-4 border border-l-4 border-border border-l-primary bg-card p-5">
-            <div className="flex items-center gap-2">
-              <Video className="size-5" />
-              <MonoLabel>Next Action</MonoLabel>
-            </div>
-            {nextVariant ? (
-              <>
-                <h3 className="text-lg font-semibold leading-tight tracking-tight">
-                  Record Variant {nextVariant.role}: {nextVariant.title}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Script, hook, and checklist are ready. Record the next
-                  variant and paste the TikTok URL after publishing.
-                </p>
-                <Button asChild className="mt-2 gap-2">
-                  <Link href={`/campaigns/brief/${nextVariant.role.toLowerCase()}`}>
-                    View Recording Brief
-                    <ArrowRight className="size-4" />
-                  </Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <h3 className="text-lg font-semibold leading-tight tracking-tight">
-                  All variants are tracking
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Check back once each 72h tracking window completes to see
-                  the campaign insight.
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Hypothesis backlog */}
-          <div className="flex flex-col border border-border bg-card">
-            <div className="border-b border-border bg-secondary p-3">
-              <MonoLabel>Hypothesis Backlog</MonoLabel>
-            </div>
-            <div className="flex flex-col gap-2 p-3">
-              {backlog.length > 0 ? (
-                backlog.map((h) => (
-                  <Link
-                    key={h.id}
-                    href="/hypotheses"
-                    className="cursor-pointer rounded border border-border p-3 transition-colors hover:border-primary"
-                  >
-                    <h5 className="mb-1 text-sm font-medium">{h.title}</h5>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {STATUS_LABEL[h.status]}
-                    </span>
-                  </Link>
-                ))
-              ) : (
-                <Link
-                  href="/hypotheses"
-                  className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground transition-colors hover:border-primary"
-                >
-                  No hypotheses yet — generate your first batch.
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* Recent insights (no confidence labels — brief override) */}
-          <div className="flex flex-col border border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border bg-secondary p-3">
-              <MonoLabel>Recent Insights</MonoLabel>
-              <Lightbulb className="size-4 text-muted-foreground" />
-            </div>
-            <div className="flex flex-col gap-2 p-3">
-              {SEED_INSIGHTS.length > 0 ? (
-                SEED_INSIGHTS.map((i) => (
-                  <Link
-                    key={i.id}
-                    href={`/insights?id=${i.id}`}
-                    className="rounded bg-secondary p-3 transition-colors hover:bg-secondary/70"
-                  >
-                    <h5 className="mb-2 text-sm font-medium leading-tight">
-                      {i.hypothesis}
-                    </h5>
-                    <p className="mb-1 text-xs text-muted-foreground">
-                      Evidence: {insightClicksPer1k(i.control)} vs{" "}
-                      {insightClicksPer1k(i.treatment)} clicks / 1K views
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Recommendation: {i.recommendedNextTest}
-                    </p>
-                  </Link>
-                ))
-              ) : (
-                <p className="rounded border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-                  No insights yet — insights appear once a campaign completes.
-                </p>
-              )}
-            </div>
-          </div>
+        <div className="flex flex-col justify-between border border-border bg-card p-4">
+          <MonoLabel>Product Clicks</MonoLabel>
+          <span className="font-mono text-2xl font-semibold">{productClicks.toLocaleString()}</span>
+        </div>
+        <div className="flex flex-col justify-between border border-border bg-card p-4">
+          <MonoLabel>Completed Experiments</MonoLabel>
+          <span className="font-mono text-2xl font-semibold">{completedExperiments}</span>
+        </div>
+        <div className="flex flex-col justify-between border border-border bg-card p-4">
+          <MonoLabel>Active Research Thread</MonoLabel>
+          <span className="font-mono text-2xl font-semibold">{activeThreads}</span>
         </div>
       </div>
+
+      <section
+        data-testid="next-action-card"
+        className="flex flex-col gap-3 border border-l-4 border-border border-l-primary bg-card p-6"
+      >
+        <div className="flex items-center gap-2">
+          <Play className="size-5 text-primary" />
+          <MonoLabel>Next Action</MonoLabel>
+        </div>
+        <h3 className="text-2xl font-semibold tracking-tight">{nextAction.title}</h3>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          {nextAction.description}
+        </p>
+        {nextAction.cta && (
+          <Button asChild className="mt-2 w-fit gap-2">
+            <Link href={nextAction.cta.href}>
+              {nextAction.cta.label}
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <section
+          data-testid="current-research-thread"
+          className="flex flex-col gap-4 border border-border bg-card p-5 lg:col-span-8"
+        >
+          <div className="flex items-center gap-2">
+            <FlaskConical className="size-4 text-muted-foreground" />
+            <MonoLabel>Current Research Thread</MonoLabel>
+          </div>
+
+          {currentQuestion && (
+            <div className="flex flex-col gap-1">
+              <MonoLabel>Current Question</MonoLabel>
+              <p className="text-base font-medium">{currentQuestion}</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Current Hypothesis</MonoLabel>
+            <p className="border-l-2 border-primary py-1 pl-3 text-sm">
+              &quot;{experiment.hypothesis}&quot;
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between border-b border-border pb-1">
+              <MonoLabel>Experiment Progress</MonoLabel>
+              <span className="rounded bg-secondary px-2 py-0.5 font-mono text-[10px]">
+                {publishedVideos}/3 variants published
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {experiment.variants.map((v) => (
+                <div
+                  key={v.role}
+                  className="flex items-center justify-between rounded border border-border p-2.5"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs font-semibold">{v.role}</span>
+                    <span className="text-sm">{v.title}</span>
+                  </div>
+                  <StatusPill tone={variantTone(v.status)}>
+                    {variantStatusLabel(v.status)}
+                  </StatusPill>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section
+          data-testid="latest-learning"
+          className="flex flex-col gap-3 border border-border bg-card p-5 lg:col-span-4"
+        >
+          <div className="flex items-center gap-2">
+            <Lightbulb className="size-4 text-muted-foreground" />
+            <MonoLabel>Latest Learning</MonoLabel>
+          </div>
+          {latestInsight ? (
+            <>
+              <p className="text-sm font-medium">{latestInsight.hypothesis}</p>
+              <div className="flex flex-col gap-1">
+                <MonoLabel>Evidence</MonoLabel>
+                <p className="text-xs text-muted-foreground">
+                  Control {insightClicksPer1k(latestInsight.control)} vs Treatment{" "}
+                  {insightClicksPer1k(latestInsight.treatment)} clicks / 1K views
+                </p>
+              </div>
+              <Button asChild variant="outline" size="sm" className="w-fit gap-2">
+                <Link href={`/insightsSbid=${latestInsight.id}`.replace("Sb", "?")}>
+                  View Evidence
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No learnings yet. Insights appear once an experiment completes.
+            </p>
+          )}
+        </section>
+      </div>
+
+      <section
+        data-testid="research-backlog"
+        className="flex flex-col gap-3 border border-border bg-card p-5"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4 text-muted-foreground" />
+            <MonoLabel>Research Backlog</MonoLabel>
+          </div>
+          <Button asChild variant="outline" size="sm" className="gap-1 font-mono text-xs">
+            <Link href="/research">Open Research Library</Link>
+          </Button>
+        </div>
+        {backlog.length > 0 ? (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {backlog.map((h) => (
+              <Link
+                key={h.id}
+                href="/research"
+                className="flex flex-col gap-1 border border-border p-3 transition-colors hover:border-primary"
+              >
+                <span className="text-sm font-medium">{h.title}</span>
+                <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {STATUS_LABEL[h.status]}
+                </span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Link
+            href="/research"
+            className="rounded border border-dashed border-border p-4 text-center text-xs text-muted-foreground transition-colors hover:border-primary"
+          >
+            No hypotheses yet — generate your first batch.
+          </Link>
+        )}
+      </section>
     </>
   );
 }

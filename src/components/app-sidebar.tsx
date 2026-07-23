@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 
 const NAV = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
-  { label: "Hypotheses", href: "/hypotheses", icon: FlaskConical },
-  { label: "Campaigns", href: "/campaigns", icon: Megaphone },
+  { label: "Research", href: "/research", icon: FlaskConical },
+  { label: "Experiments", href: "/campaigns", icon: Megaphone },
   { label: "Videos", href: "/videos", icon: Clapperboard },
   { label: "Insights", href: "/insights", icon: BarChart3 },
 ];
@@ -65,7 +65,7 @@ export function AppSidebar() {
         <Button asChild className="w-full gap-2">
           <Link href="/campaigns">
             <Plus className="size-4" />
-            Create Campaign
+            Create Experiment
           </Link>
         </Button>
       </div>

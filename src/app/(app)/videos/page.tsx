@@ -6,7 +6,7 @@ import { Search, ExternalLink, Link2, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useCampaign,
+  useExperiment,
   variantStatusLabel,
   variantStatusTone,
   clicksPer1k,
@@ -35,11 +35,11 @@ function StatusDot({ tone }: { tone: "active" | "idle" }) {
 }
 
 export default function VideosPage() {
-  const { campaign, loaded } = useCampaign();
+  const { experiment, loaded } = useExperiment();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("All");
 
-  const videos = campaign.variants.filter(
+  const videos = experiment.variants.filter(
     (v) => v.status === "tracking" || v.status === "completed",
   );
 
@@ -53,14 +53,14 @@ export default function VideosPage() {
   const [selectedRole, setSelectedRole] = useState<VariantRole | null>(
     videos[0]?.role ?? null,
   );
-  const selected = campaign.variants.find((v) => v.role === selectedRole) ?? null;
+  const selected = experiment.variants.find((v) => v.role === selectedRole) ?? null;
 
   function copyUrl(url: string) {
     navigator.clipboard?.writeText(url);
   }
 
   // Same gate every other (app) page uses: don't render campaign-derived UI
-  // until the useEffect in CampaignProvider has re-read localStorage. Without
+  // until the useEffect in ExperimentProvider has re-read localStorage. Without
   // this, VideoInspector's tracking-window bar renders a full-precision
   // `Date.now()`-derived width on the server (e.g. "5.555559799382716%"),
   // then the browser's CSSOM re-serializes that inline style to 6 significant
@@ -149,7 +149,7 @@ export default function VideosPage() {
                       {v.title}
                     </td>
                     <td className="max-w-[150px] truncate p-3 text-xs text-muted-foreground">
-                      {campaign.name}
+                      {experiment.name}
                     </td>
                     <td className="p-3">
                       <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground">
@@ -204,8 +204,8 @@ export default function VideosPage() {
             <VideoInspector
               key={selected.role}
               variant={selected}
-              campaignName={campaign.name}
-              trackingWindowHours={campaign.trackingWindowHours}
+              experimentName={experiment.name}
+              trackingWindowHours={experiment.trackingWindowHours}
               onCopyUrl={copyUrl}
             />
           ) : (
@@ -221,12 +221,12 @@ export default function VideosPage() {
 
 function VideoInspector({
   variant,
-  campaignName,
+  experimentName,
   trackingWindowHours,
   onCopyUrl,
 }: {
   variant: Variant;
-  campaignName: string;
+  experimentName: string;
   trackingWindowHours: number;
   onCopyUrl: (url: string) => void;
 }) {
@@ -244,7 +244,7 @@ function VideoInspector({
               </span>
               <h3 className="mt-2 text-lg font-bold">{variant.title}</h3>
               <p className="font-mono text-[11px] uppercase tracking-tight text-muted-foreground">
-                {campaignName}
+                {experimentName}
               </p>
             </div>
             <span className="rounded border border-success/20 bg-[#ECFDF5] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-success">

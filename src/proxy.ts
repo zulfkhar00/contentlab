@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // App routes that require a completed onboarding before they can be viewed.
 const APP_PREFIXES = [
   "/overview",
-  "/hypotheses",
+  "/research",
   "/campaigns",
   "/videos",
   "/insights",

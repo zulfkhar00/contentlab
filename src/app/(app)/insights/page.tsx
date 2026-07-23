@@ -1,16 +1,32 @@
 "use client";
 
+// Screen 6 (Experiment Results) + Screen 7 (Next Hypothesis Candidates) per
+// actionable_ui_ux_changes.md sections 10 and 11.
+//
+// Structure:
+//   1 Research Question
+//   2 Hypothesis Tested
+//   3 Variant Comparison (control / treatment / optional alternative)
+//   4 Observed Result
+//   5 Supported Learning
+//   6 What Is Not Proven
+//   7 Experiment Limitations
+//   8 Outcome Classification (plain-language)
+//   9 Next Hypothesis Candidates (three cards)
+
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lightbulb, Sparkles, ArrowRight } from "lucide-react";
+import { CheckCircle2, Lightbulb, Sparkles, ArrowRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { clicksPer1k, formatTimestamp } from "@/lib/campaign";
 import {
   SEED_INSIGHTS,
   insightClicksPer1k,
   toHypothesis,
+  candidateToHypothesis,
   type Insight,
   type ComparedVariant,
+  type NextCandidate,
 } from "@/lib/insights";
 import { useHypotheses } from "@/lib/hypotheses";
 
@@ -22,39 +38,96 @@ function MonoLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function VariantCard({ variant }: { variant: ComparedVariant }) {
+function ResultSection({
+  index,
+  title,
+  children,
+  testId,
+}: {
+  index: number;
+  title: string;
+  children: React.ReactNode;
+  testId?: string;
+}) {
   return (
-    <div className="flex flex-col border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border bg-secondary p-3">
-        <span className="flex size-6 items-center justify-center bg-primary font-mono text-xs text-primary-foreground">
-          {variant.role}
+    <section data-testid={testId} className="flex flex-col gap-2 border border-border bg-card p-5">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          Section {index}
         </span>
-        <div>
-          <h4 className="font-mono text-xs font-bold">{variant.title}</h4>
-          <span className="block font-mono text-[10px] uppercase text-muted-foreground">
-            {variant.roleLabel}
-          </span>
-        </div>
+        <h3 className="text-base font-semibold tracking-tight">{title}</h3>
       </div>
-      <div className="grid grid-cols-3 divide-x divide-border">
-        <div className="p-3">
-          <div className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">
-            Views
-          </div>
-          <div className="font-mono text-lg">{variant.views.toLocaleString()}</div>
+      {children}
+    </section>
+  );
+}
+
+function ComparisonRow({ v }: { v: ComparedVariant }) {
+  return (
+    <tr className="border-b border-border last:border-b-0">
+      <td className="p-3">
+        <div className="flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center bg-primary font-mono text-xs text-primary-foreground">
+            {v.role}
+          </span>
+          <span className="text-sm font-medium">{v.title}</span>
         </div>
-        <div className="p-3">
-          <div className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">
-            Clicks
-          </div>
-          <div className="font-mono text-lg">{variant.clicks.toLocaleString()}</div>
-        </div>
-        <div className="p-3">
-          <div className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">
-            Clicks / 1K
-          </div>
-          <div className="font-mono text-lg">{insightClicksPer1k(variant)}</div>
-        </div>
+      </td>
+      <td className="p-3 text-sm">{v.roleLabel}</td>
+      <td className="p-3 text-right font-mono text-xs">{v.views.toLocaleString()}</td>
+      <td className="p-3 text-right font-mono text-xs">{v.clicks.toLocaleString()}</td>
+      <td className="p-3 text-right font-mono text-xs font-semibold">{insightClicksPer1k(v)}</td>
+    </tr>
+  );
+}
+
+function CandidateCard({
+  candidate,
+  insight,
+  alreadyAdded,
+  onAdd,
+  onDismiss,
+  dismissed,
+}: {
+  candidate: NextCandidate;
+  insight: Insight;
+  alreadyAdded: boolean;
+  onAdd: (c: NextCandidate) => void;
+  onDismiss: (id: string) => void;
+  dismissed: boolean;
+}) {
+  const isRecommended = !!candidate.recommended;
+  return (
+    <div
+      data-testid={"candidate-card-" + candidate.id}
+      className={"flex flex-col gap-3 border bg-card p-4 " + (isRecommended ? "border-primary" : "border-border") + (dismissed ? " opacity-60" : "")}
+    >
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          {candidate.kind}
+        </span>
+        {isRecommended && (
+          <span className="rounded bg-primary px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary-foreground">
+            Recommended
+          </span>
+        )}
+      </div>
+      <p className="text-sm font-medium leading-relaxed">{candidate.statement}</p>
+      <div className="flex flex-col gap-1 border-t border-border pt-2">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          Why This Follows
+        </span>
+        <p className="text-xs text-muted-foreground">{candidate.whyThisFollows}</p>
+      </div>
+      <div className="mt-auto flex flex-wrap gap-2">
+        <Button size="sm" className="flex-1 gap-1" onClick={() => onAdd(candidate)} disabled={dismissed}>
+          {alreadyAdded ? "View in Research" : "Review Hypothesis"}
+          <ArrowRight className="size-3.5" />
+        </Button>
+        <Button size="sm" variant="outline" className="gap-1" onClick={() => onDismiss(candidate.id)} disabled={dismissed || alreadyAdded}>
+          <X className="size-3.5" />
+          Not Relevant
+        </Button>
       </div>
     </div>
   );
@@ -63,138 +136,176 @@ function VariantCard({ variant }: { variant: ComparedVariant }) {
 function InsightDetail({ insight }: { insight: Insight }) {
   const router = useRouter();
   const { hypotheses, addHypothesis } = useHypotheses();
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  const followUpHypothesis = toHypothesis(insight);
-  const alreadyAdded = hypotheses.some((h) => h.id === followUpHypothesis.id);
+  const legacyFollowUp = toHypothesis(insight);
+  const candidates = insight.nextCandidates ?? [];
 
-  const totalViews = insight.control.views + insight.treatment.views;
-  const totalClicks = insight.control.clicks + insight.treatment.clicks;
+  const totalViews = insight.control.views + insight.treatment.views + (insight.alternative?.views ?? 0);
+  const totalClicks = insight.control.clicks + insight.treatment.clicks + (insight.alternative?.clicks ?? 0);
 
-  function handleFollowUpClick() {
-    if (alreadyAdded) {
-      router.push("/hypotheses");
-    } else {
-      addHypothesis(followUpHypothesis);
+  function handleCandidateAdd(c: NextCandidate) {
+    const h = candidateToHypothesis(insight, c);
+    const already = hypotheses.some((x) => x.id === h.id);
+    if (already) {
+      router.push("/research");
+      return;
     }
+    addHypothesis(h);
   }
+
+  function handleLegacyFollowUp() {
+    const already = hypotheses.some((x) => x.id === legacyFollowUp.id);
+    if (already) router.push("/research");
+    else addHypothesis(legacyFollowUp);
+  }
+
+  const legacyAlreadyAdded = hypotheses.some((x) => x.id === legacyFollowUp.id);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="border border-border bg-card">
-        <div className="border-b border-border bg-secondary p-4">
-          <h3 className="mb-1 text-lg font-semibold tracking-tight">
-            {insight.campaignName}
-          </h3>
-          <p className="text-sm italic text-muted-foreground">
-            &quot;{insight.hypothesis}&quot;
-          </p>
+      <div data-testid="results-header" className="flex flex-col gap-2 border border-border bg-card p-5">
+        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span>Experiment Results</span>
+          <span className="rounded bg-[#ECFDF5] px-1.5 py-0.5 text-success">Completed</span>
         </div>
-        <div className="grid grid-cols-3 divide-x divide-border">
-          <div className="p-3">
-            <MonoLabel>Primary Metric</MonoLabel>
-            <p className="mt-1 text-sm font-semibold">{insight.primaryMetric}</p>
+        <h2 className="text-2xl font-semibold tracking-tight">{insight.experimentName}</h2>
+        <div className="grid grid-cols-3 gap-3 border-t border-border pt-3 text-sm">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Primary Metric</span>
+            <span>{insight.primaryMetric}</span>
           </div>
-          <div className="p-3">
-            <MonoLabel>Tracking Window</MonoLabel>
-            <p className="mt-1 text-sm font-semibold">{insight.windowHours}h per variant</p>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Tracking Window</span>
+            <span>{insight.windowHours}h per variant</span>
           </div>
-          <div className="p-3">
-            <MonoLabel>Completed</MonoLabel>
-            <p className="mt-1 text-sm font-semibold">
-              {formatTimestamp(insight.completedAt)}
-            </p>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Completed</span>
+            <span>{formatTimestamp(insight.completedAt)}</span>
           </div>
         </div>
       </div>
 
-      {/* Completed-campaign summary metrics */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="border border-border bg-card p-4">
-          <MonoLabel>Total Views</MonoLabel>
-          <div className="mt-1 font-mono text-xl">{totalViews.toLocaleString()}</div>
-        </div>
-        <div className="border border-border bg-card p-4">
-          <MonoLabel>Total Clicks</MonoLabel>
-          <div className="mt-1 font-mono text-xl">{totalClicks.toLocaleString()}</div>
-        </div>
-        <div className="border border-border bg-card p-4">
-          <MonoLabel>Combined Clicks / 1K</MonoLabel>
-          <div className="mt-1 font-mono text-xl">{clicksPer1k(totalViews, totalClicks)}</div>
-        </div>
-      </div>
+      {insight.researchQuestion && (
+        <ResultSection index={1} title="Research Question" testId="section-research-question">
+          <p className="text-base">{insight.researchQuestion}</p>
+        </ResultSection>
+      )}
 
-      {/* Compared variants */}
-      <div>
-        <h4 className="mb-2 text-sm font-semibold tracking-tight">Compared Variants</h4>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <VariantCard variant={insight.control} />
-          <VariantCard variant={insight.treatment} />
-        </div>
-      </div>
+      <ResultSection index={2} title="Hypothesis Tested" testId="section-hypothesis-tested">
+        <p className="border-l-2 border-primary py-1 pl-3 text-sm">&quot;{insight.hypothesis}&quot;</p>
+      </ResultSection>
 
-      {/* Evidence & lift */}
-      <div className="border border-border bg-card">
-        <div className="flex items-center justify-between bg-primary p-4 text-primary-foreground">
-          <span className="font-mono text-xs font-bold uppercase tracking-widest">
-            Lift vs Control
-          </span>
+      <ResultSection index={3} title="Variant Comparison" testId="section-variant-comparison">
+        <div className="overflow-x-auto">
+          <table className="w-full border border-border">
+            <thead className="bg-secondary font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="p-3 text-left font-medium">Variant</th>
+                <th className="p-3 text-left font-medium">Role</th>
+                <th className="p-3 text-right font-medium">Views</th>
+                <th className="p-3 text-right font-medium">Clicks</th>
+                <th className="p-3 text-right font-medium">Clicks / 1K</th>
+              </tr>
+            </thead>
+            <tbody>
+              <ComparisonRow v={insight.control} />
+              <ComparisonRow v={insight.treatment} />
+              {insight.alternative && <ComparisonRow v={insight.alternative} />}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 flex justify-end gap-4 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span>Total Views: {totalViews.toLocaleString()}</span>
+          <span>Total Clicks: {totalClicks.toLocaleString()}</span>
+          <span>Combined efficiency {clicksPer1k(totalViews, totalClicks)}</span>
+        </div>
+      </ResultSection>
+
+      <ResultSection index={4} title="Observed Result" testId="section-observed-result">
+        <div className="flex items-center justify-between border border-border bg-primary p-4 text-primary-foreground">
+          <span className="font-mono text-xs uppercase tracking-widest">Treatment lift vs Control</span>
           <span className="font-mono text-2xl">{insight.lift}x</span>
         </div>
-        <p className="p-4 text-sm text-muted-foreground">{insight.evidenceBasis}</p>
-      </div>
+        <p className="text-sm text-muted-foreground">{insight.evidenceBasis}</p>
+      </ResultSection>
 
-      <div className="border border-border bg-card p-4">
-        <MonoLabel>Supported Learning</MonoLabel>
-        <p className="mt-2 text-sm">{insight.supportedLearning}</p>
-      </div>
+      <ResultSection index={5} title="Supported Learning" testId="section-supported-learning">
+        <p className="text-sm">{insight.supportedLearning}</p>
+      </ResultSection>
 
-      <div className="border border-dashed border-border bg-secondary p-4">
-        <MonoLabel>Do Not Infer Yet</MonoLabel>
-        <ul className="mt-2 flex flex-col gap-2">
+      <ResultSection index={6} title="What Is Not Proven" testId="section-not-proven">
+        <ul className="flex flex-col gap-2">
           {insight.doNotInferYet.map((caveat) => (
             <li key={caveat} className="flex gap-2 text-sm text-muted-foreground">
-              <span aria-hidden>—</span>
+              <span aria-hidden>-</span>
               <span>{caveat}</span>
             </li>
           ))}
         </ul>
-      </div>
+      </ResultSection>
 
-      <div className="border border-border bg-card p-4">
-        <MonoLabel>Recommended Next Test</MonoLabel>
-        <p className="mt-2 text-sm">{insight.recommendedNextTest}</p>
-      </div>
+      {insight.limitations && insight.limitations.length > 0 && (
+        <ResultSection index={7} title="Experiment Limitations" testId="section-limitations">
+          <ul className="flex flex-col gap-2">
+            {insight.limitations.map((lim) => (
+              <li key={lim} className="flex gap-2 text-sm text-muted-foreground">
+                <span aria-hidden>-</span>
+                <span>{lim}</span>
+              </li>
+            ))}
+          </ul>
+        </ResultSection>
+      )}
 
-      {/* Follow-up hypothesis preview */}
-      <div className="border border-border bg-card">
-        <div className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-3">
-          <Sparkles className="size-4" />
-          <h3 className="text-sm font-semibold tracking-tight">
-            Follow-up Hypothesis Preview
-          </h3>
-        </div>
-        <div className="flex flex-col gap-3 p-4">
-          <p className="text-sm font-semibold leading-relaxed">
-            &quot;{insight.followUp.statement}&quot;
-          </p>
-          <div className="flex flex-col gap-2 border-t border-border pt-3">
-            <div>
-              <MonoLabel>Category</MonoLabel>
-              <p className="mt-0.5 text-sm">{insight.followUp.category}</p>
-            </div>
-            <div>
-              <MonoLabel>Rationale</MonoLabel>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {insight.followUp.rationale}
-              </p>
-            </div>
+      {insight.outcome && (
+        <ResultSection index={8} title="Outcome Classification" testId="section-outcome">
+          <div className="flex flex-col gap-2 border border-border bg-secondary p-3">
+            <span className="text-lg font-semibold">{insight.outcome.label}</span>
+            <p className="text-sm text-muted-foreground">{insight.outcome.description}</p>
           </div>
-          <Button onClick={handleFollowUpClick} className="mt-1 gap-2 self-start">
-            {alreadyAdded ? "View in Hypotheses" : "Add to Hypotheses"}
+        </ResultSection>
+      )}
+
+      {candidates.length > 0 ? (
+        <section data-testid="next-candidates" className="flex flex-col gap-3 border border-border bg-card p-5">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Section 9</span>
+            <h3 className="text-base font-semibold tracking-tight">Next Hypothesis Candidates</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">What is the most valuable uncertainty to test next?</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {candidates.map((c) => {
+              const h = candidateToHypothesis(insight, c);
+              const already = hypotheses.some((x) => x.id === h.id);
+              return (
+                <CandidateCard
+                  key={c.id}
+                  candidate={c}
+                  insight={insight}
+                  alreadyAdded={already}
+                  dismissed={dismissedIds.has(c.id)}
+                  onAdd={handleCandidateAdd}
+                  onDismiss={(id) => setDismissedIds((prev) => { const n = new Set(prev); n.add(id); return n; })}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <section data-testid="follow-up-legacy" className="flex flex-col gap-3 border border-border bg-card p-5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="size-4" />
+            <h3 className="text-sm font-semibold">Follow-up Hypothesis Preview</h3>
+          </div>
+          <p className="text-sm font-semibold">&quot;{insight.followUp.statement}&quot;</p>
+          <p className="text-xs text-muted-foreground">{insight.followUp.rationale}</p>
+          <Button onClick={handleLegacyFollowUp} className="w-fit gap-2">
+            {legacyAlreadyAdded ? "View in Research" : "Add to Research"}
             <ArrowRight className="size-4" />
           </Button>
-        </div>
-      </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -214,10 +325,9 @@ function InsightsPageInner() {
   return (
     <>
       <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Insights</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Experiment Results</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Evidence-backed results from completed campaigns, with a drafted
-          follow-up hypothesis for each.
+          What did we learn, what remains unknown, and what should we test next?
         </p>
       </div>
 
@@ -248,7 +358,7 @@ function InsightsPageInner() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold">{insight.campaignName}</span>
+                      <span className="text-sm font-semibold">{insight.experimentName}</span>
                       <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground">
                         {insight.lift}x
                       </span>

@@ -1,7 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { ProjectContextProvider } from "@/lib/project-context";
-import { CampaignProvider } from "@/lib/campaign";
+import { ExperimentProvider } from "@/lib/campaign";
 import { HypothesesProvider } from "@/lib/hypotheses";
 
 export default function AppLayout({
@@ -11,7 +11,7 @@ export default function AppLayout({
 }) {
   return (
     <ProjectContextProvider>
-      <CampaignProvider>
+      <ExperimentProvider>
         <HypothesesProvider>
           <div className="min-h-screen bg-background">
             <AppSidebar />
@@ -23,7 +23,7 @@ export default function AppLayout({
             </div>
           </div>
         </HypothesesProvider>
-      </CampaignProvider>
+      </ExperimentProvider>
     </ProjectContextProvider>
   );
 }

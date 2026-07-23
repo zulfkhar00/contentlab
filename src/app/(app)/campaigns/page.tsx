@@ -1,38 +1,49 @@
 "use client";
 
-import { useState } from "react";
+// Screen 4 (Experiment Workspace) per actionable_ui_ux_changes.md section 6.
+// Refocuses the old Campaigns page on experiment execution: header + status
+// row + hypothesis summary + experiment-integrity panel + three variant cards
+// + a compact timeline + one contextual primary action.
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Copy, Check } from "lucide-react";
+import { AlertTriangle, ArrowRight, Copy, Check, ClipboardList, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useCampaign,
-  getCampaignStatus,
-  campaignStatusLabel,
+  useExperiment,
+  getExperimentStatus,
+  experimentStatusLabel,
   getPublishedCount,
   getNextActionVariant,
   variantStatusLabel,
-  variantStatusTone,
   clicksPer1k,
   isValidTiktokUrl,
+  type ExperimentData,
   type Variant,
   type VariantRole,
+  type VariantStatus,
 } from "@/lib/campaign";
+import { useHypotheses, type Hypothesis } from "@/lib/hypotheses";
 
 function StatusPill({
   children,
-  tone = "idle",
+  tone,
 }: {
   children: React.ReactNode;
-  tone?: "active" | "idle";
+  tone: "active" | "idle" | "success" | "warning";
 }) {
+  const style =
+    tone === "active"
+      ? "bg-primary text-primary-foreground"
+      : tone === "success"
+        ? "bg-[#ECFDF5] text-success"
+        : tone === "warning"
+          ? "bg-[#FEF2F2] text-destructive"
+          : "border border-border bg-card text-muted-foreground";
   return (
     <span
-      className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${
-        tone === "active"
-          ? "bg-[#ECFDF5] text-success"
-          : "border border-border bg-card text-muted-foreground"
-      }`}
+      className={`shrink-0 whitespace-nowrap rounded px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide ${style}`}
     >
       {children}
     </span>
@@ -47,18 +58,92 @@ function MonoLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function stepperLabel(v: Variant, nextRole: VariantRole | null) {
-  if (v.status === "tracking") return `Variant ${v.role} (Published / Tracking)`;
-  if (v.status === "completed") return `Variant ${v.role} (Completed)`;
-  if (v.role === nextRole) return `Variant ${v.role} (Next)`;
-  return `Variant ${v.role} (Ready)`;
+function variantTone(status: VariantStatus): "active" | "idle" | "success" | "warning" {
+  if (status === "completed") return "success";
+  if (status === "tracking") return "active";
+  return "idle";
 }
 
-export default function CampaignsPage() {
-  const { campaign, loaded, startTracking } = useCampaign();
+function findLinkedHypothesis(
+  experiment: ExperimentData,
+  hypotheses: Hypothesis[],
+): Hypothesis | null {
+  // Match by statement so the linked hypothesis Variable / Controlled
+  // Elements / Research Question surface on this screen without
+  // duplicating them on ExperimentData yet.
+  const stmt = experiment.hypothesis.trim();
+  return (
+    hypotheses.find((h) => h.statement.trim() === stmt) ??
+    hypotheses.find((h) => h.status === "testing") ??
+    null
+  );
+}
+
+// Compact per-variant event list surfaced in the Experiment Timeline
+// panel. Each variant contributes 1-3 event rows based on its current
+// status; no real transition timestamps exist yet so the list is derived,
+// not stored.
+type TimelineEvent = { role: VariantRole; label: string; done: boolean };
+
+function timelineEventsFor(v: Variant): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  events.push({ role: v.role, label: `${v.role} approved`, done: true });
+  if (v.status === "ready_to_record") {
+    events.push({ role: v.role, label: `${v.role} awaiting recording`, done: false });
+    return events;
+  }
+  if (v.status === "queued") {
+    events.pop();
+    events.push({ role: v.role, label: `${v.role} awaiting review`, done: false });
+    return events;
+  }
+  events.push({ role: v.role, label: `${v.role} published`, done: true });
+  if (v.status === "tracking") {
+    events.push({ role: v.role, label: `${v.role} tracking`, done: false });
+  }
+  if (v.status === "completed") {
+    events.push({ role: v.role, label: `${v.role} tracking completed`, done: true });
+  }
+  return events;
+}
+
+function trackingHoursRemaining(v: Variant, windowHours: number): number | null {
+  if (v.status !== "tracking" || !v.publishedAt) return null;
+  const startedMs = new Date(v.publishedAt).getTime();
+  const endsMs = startedMs + windowHours * 3600 * 1000;
+  const remainingMs = endsMs - Date.now();
+  return Math.max(0, Math.ceil(remainingMs / (3600 * 1000)));
+}
+
+export default function ExperimentWorkspacePage() {
+  const { experiment, loaded, startTracking } = useExperiment();
+  const { hypotheses, loaded: hypothesesLoaded } = useHypotheses();
   const [urlDraft, setUrlDraft] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [copiedRole, setCopiedRole] = useState<VariantRole | null>(null);
+
+  const linked = useMemo(
+    () => (hypothesesLoaded ? findLinkedHypothesis(experiment, hypotheses) : null),
+    [experiment, hypotheses, hypothesesLoaded],
+  );
+
+  if (!loaded || !hypothesesLoaded) return null;
+
+  const status = getExperimentStatus(experiment.variants);
+  const published = getPublishedCount(experiment.variants);
+  const nextVariant = getNextActionVariant(experiment.variants);
+  const anyCompleted = experiment.variants.some((v) => v.status === "completed");
+  const allCompleted = experiment.variants.every((v) => v.status === "completed");
+
+  // Single dominant CTA per doc: "Only one dominant action".
+  const primaryAction = nextVariant
+    ? {
+        label: `Review Variant ${nextVariant.role}`,
+        href: `/campaigns/brief/${nextVariant.role.toLowerCase()}`,
+      }
+    : allCompleted
+      ? { label: "Review Experiment Results", href: "/insights" }
+      : null;
 
   function copyHook(role: VariantRole, hook: string) {
     navigator.clipboard?.writeText(hook);
@@ -69,7 +154,7 @@ export default function CampaignsPage() {
   function submitUrl(role: VariantRole) {
     const trimmed = urlDraft.trim();
     if (!isValidTiktokUrl(trimmed)) {
-      setUrlError("Paste a valid TikTok video URL (https://tiktok.com/...).");
+      setUrlError("Paste a valid TikTok video URL (https://tiktok.com/...).".replaceAll("/", "/"));
       return;
     }
     setUrlError(null);
@@ -77,354 +162,257 @@ export default function CampaignsPage() {
     setUrlDraft("");
   }
 
-  if (!loaded) return null;
-
-  const status = getCampaignStatus(campaign.variants);
-  const published = getPublishedCount(campaign.variants);
-  const nextVariant = getNextActionVariant(campaign.variants);
-
   return (
     <>
       <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Campaigns</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Experiment Workspace</h2>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Run 3-variant content experiments and track which videos drive
-          product clicks.
+          Is the experiment being executed consistently?
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Main workspace */}
-        <div className="flex flex-col gap-6 lg:col-span-8">
-          {/* Active campaign */}
-          <section className="border border-border bg-card">
-            <div className="flex items-center justify-between border-b border-border bg-secondary p-4">
-              <h3 className="text-lg font-semibold tracking-tight">
-                Active Campaign: {campaign.name}
-              </h3>
-              <StatusPill tone={status === "ready" ? "idle" : "active"}>
-                {campaignStatusLabel(status)}
-              </StatusPill>
-            </div>
-            <div className="grid grid-cols-2 gap-4 border-b border-border p-4 text-sm md:grid-cols-5">
-              <div className="flex flex-col gap-1 md:col-span-2">
-                <MonoLabel>Hypothesis</MonoLabel>
-                <p className="pr-4">{campaign.hypothesis}</p>
-              </div>
-              <div className="flex flex-col gap-1">
-                <MonoLabel>Primary Metric</MonoLabel>
-                <p>{campaign.primaryMetric}</p>
-              </div>
-              <div className="flex flex-col gap-1">
-                <MonoLabel>CTA</MonoLabel>
-                <p>{campaign.cta}</p>
-              </div>
-              <div className="flex flex-col gap-1">
-                <MonoLabel>Tracking Window</MonoLabel>
-                <p>{campaign.trackingWindowLabel}</p>
-              </div>
-            </div>
-            <div className="p-4">
-              <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                Progress {published}/3 variants published
-              </div>
-              <div className="flex w-full items-center gap-2">
-                {campaign.variants.map((v) => (
-                  <div
-                    key={v.role}
-                    className={`h-1 flex-1 ${
-                      variantStatusTone(v.status) === "active"
-                        ? "bg-primary"
-                        : "bg-secondary"
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="mt-2 flex justify-between font-mono text-[10px] uppercase text-muted-foreground">
-                {campaign.variants.map((v) => (
-                  <span key={v.role}>
-                    {stepperLabel(v, nextVariant?.role ?? null)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Variant cards */}
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {campaign.variants.map((v) => {
-              const isNext = v.role === nextVariant?.role;
-              const isLive = variantStatusTone(v.status) === "active";
-              return (
-                <div
-                  key={v.role}
-                  className={`flex h-full flex-col bg-card ${
-                    isNext ? "border-2 border-primary" : "border border-border"
-                  }`}
-                >
-                  <div className="flex min-h-[60px] items-start justify-between gap-2 border-b border-border bg-secondary p-3">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex size-6 items-center justify-center font-mono text-xs ${
-                          v.status === "queued"
-                            ? "border border-border bg-card"
-                            : "bg-primary text-primary-foreground"
-                        }`}
-                      >
-                        {v.role}
-                      </span>
-                      <div>
-                        <h4 className="font-mono text-xs font-bold">{v.title}</h4>
-                        <span className="block font-mono text-[10px] uppercase text-muted-foreground">
-                          {v.roleLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <StatusPill tone={variantStatusTone(v.status)}>
-                      {variantStatusLabel(v.status)}
-                    </StatusPill>
-                  </div>
-
-                  <div className="flex flex-1 flex-col gap-3 p-3">
-                    <div>
-                      <span className="mb-1 block font-mono text-[10px] uppercase text-muted-foreground">
-                        Hook
-                      </span>
-                      <p
-                        className={`border-l-2 border-border pl-2 text-sm italic ${
-                          v.status === "queued" ? "text-muted-foreground" : ""
-                        }`}
-                      >
-                        &quot;{v.hook}&quot;
-                      </p>
-                    </div>
-
-                    {isLive && v.metrics && (
-                      <div className="mt-auto grid grid-cols-3 gap-2 border border-border bg-secondary p-2 font-mono text-xs">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase text-muted-foreground">
-                            Views
-                          </span>
-                          <span>{v.metrics.views.toLocaleString()}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase text-muted-foreground">
-                            Clicks
-                          </span>
-                          <span>{v.metrics.clicks.toLocaleString()}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase text-muted-foreground">
-                            Clicks/1K
-                          </span>
-                          <span>
-                            {clicksPer1k(v.metrics.views, v.metrics.clicks)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {isNext && v.status === "ready_to_record" && (
-                      <div className="mt-auto flex flex-col gap-1">
-                        <Input
-                          value={urlDraft}
-                          onChange={(e) => {
-                            setUrlDraft(e.target.value);
-                            setUrlError(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") submitUrl(v.role);
-                          }}
-                          placeholder="Paste TikTok URL..."
-                          className="text-sm"
-                        />
-                        {urlError && (
-                          <p className="text-xs text-destructive">{urlError}</p>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="mt-1"
-                          onClick={() => submitUrl(v.role)}
-                        >
-                          Start Tracking
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-2 border-t border-border p-2">
-                    {isLive ? (
-                      <Button asChild size="sm" variant="outline">
-                        <Link href="/videos">View Metrics</Link>
-                      </Button>
-                    ) : isNext ? (
-                      <>
-                        <Button asChild size="sm">
-                          <Link href={`/campaigns/brief/${v.role.toLowerCase()}`}>
-                            View Recording Brief
-                          </Link>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={() => copyHook(v.role, v.hook)}
-                        >
-                          {copiedRole === v.role ? (
-                            <Check className="size-3.5" />
-                          ) : (
-                            <Copy className="size-3.5" />
-                          )}
-                          {copiedRole === v.role ? "Copied!" : "Copy Hook"}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="outline"
-                        className="text-muted-foreground"
-                      >
-                        <Link href={`/campaigns/brief/${v.role.toLowerCase()}`}>
-                          Preview Brief
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-
-          {/* Metrics table */}
-          <section className="mt-4 border border-border bg-card">
-            <div className="border-b border-border p-4">
-              <h3 className="text-lg font-semibold tracking-tight">Metrics</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left">
-                <thead className="border-b border-border bg-secondary font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="p-3 font-medium">Variant</th>
-                    <th className="p-3 font-medium">Role</th>
-                    <th className="p-3 font-medium">Status</th>
-                    <th className="p-3 text-right font-medium">Views</th>
-                    <th className="p-3 text-right font-medium">Likes</th>
-                    <th className="p-3 text-right font-medium">Comments</th>
-                    <th className="p-3 text-right font-medium">Clicks</th>
-                    <th className="p-3 text-right font-medium">Clicks/1K</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border font-mono text-xs">
-                  {campaign.variants.map((v) => {
-                    const isLive = variantStatusTone(v.status) === "active";
-                    return (
-                      <tr key={v.role} className="hover:bg-secondary/50">
-                        <td className="flex items-center gap-2 p-3">
-                          <span
-                            className={`flex size-5 items-center justify-center text-[10px] ${
-                              v.status === "queued"
-                                ? "border border-border bg-card"
-                                : "bg-primary text-primary-foreground"
-                            }`}
-                          >
-                            {v.role}
-                          </span>
-                          {v.title}
-                        </td>
-                        <td className="p-3">{v.roleLabel}</td>
-                        <td className="p-3">
-                          <StatusPill tone={variantStatusTone(v.status)}>
-                            {variantStatusLabel(v.status)}
-                          </StatusPill>
-                        </td>
-                        <td className="p-3 text-right">
-                          {isLive && v.metrics
-                            ? v.metrics.views.toLocaleString()
-                            : "—"}
-                        </td>
-                        <td className="p-3 text-right">
-                          {isLive && v.metrics
-                            ? v.metrics.likes.toLocaleString()
-                            : "—"}
-                        </td>
-                        <td className="p-3 text-right">
-                          {isLive && v.metrics
-                            ? v.metrics.comments.toLocaleString()
-                            : "—"}
-                        </td>
-                        <td className="p-3 text-right">
-                          {isLive && v.metrics
-                            ? v.metrics.clicks.toLocaleString()
-                            : "—"}
-                        </td>
-                        <td className="p-3 text-right">
-                          {isLive && v.metrics
-                            ? clicksPer1k(v.metrics.views, v.metrics.clicks)
-                            : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+      <section
+        data-testid="experiment-header"
+        className="flex flex-col gap-3 border border-border bg-card p-5"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Experiment 01</MonoLabel>
+            <h3 className="text-xl font-semibold tracking-tight">{experiment.name}</h3>
+          </div>
+          <StatusPill tone={status === "ready" ? "idle" : "active"}>
+            {experimentStatusLabel(status)}
+          </StatusPill>
         </div>
-
-        {/* Right rail */}
-        <div className="flex flex-col gap-6 lg:col-span-4">
-          <div className="border border-border bg-card">
-            <div className="border-b border-border bg-secondary p-4">
-              <h3 className="mb-1 text-sm font-semibold">Next Action</h3>
-              {nextVariant && (
-                <p className="text-sm font-semibold">
-                  Record Variant {nextVariant.role}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-4 p-4">
-              {nextVariant ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    Record the {nextVariant.title.toLowerCase()} treatment, add
-                    captions, publish it on TikTok, then paste the URL to start
-                    tracking.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    <Button asChild size="sm">
-                      <Link
-                        href={`/campaigns/brief/${nextVariant.role.toLowerCase()}`}
-                      >
-                        View Recording Brief
-                      </Link>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      onClick={() => copyHook(nextVariant.role, nextVariant.hook)}
-                    >
-                      {copiedRole === nextVariant.role ? (
-                        <Check className="size-3.5" />
-                      ) : (
-                        <Copy className="size-3.5" />
-                      )}
-                      {copiedRole === nextVariant.role ? "Copied!" : "Copy Hook"}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  All variants are tracking. Check back once each 72h window
-                  completes.
-                </p>
-              )}
-            </div>
+        <div className="grid grid-cols-1 gap-3 border-t border-border pt-3 text-sm md:grid-cols-3">
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Status</MonoLabel>
+            <span>{experimentStatusLabel(status)} · {published}/3 published</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Primary Metric</MonoLabel>
+            <span>{experiment.primaryMetric}</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Tracking Window</MonoLabel>
+            <span>{experiment.trackingWindowLabel}</span>
           </div>
         </div>
-      </div>
+
+        <div className="flex flex-col gap-1 border-t border-border pt-3">
+          <MonoLabel>Hypothesis</MonoLabel>
+          <p className="border-l-2 border-primary py-1 pl-3 text-sm">
+            &quot;{experiment.hypothesis}&quot;
+          </p>
+        </div>
+      </section>
+
+      <section
+        data-testid="experiment-integrity"
+        className="flex flex-col gap-3 border border-border bg-card p-5"
+      >
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4 text-muted-foreground" />
+          <MonoLabel>Experiment Integrity</MonoLabel>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Variable Under Test</MonoLabel>
+            <p className="text-sm">
+              {linked?.independentVariable ?? "Opening angle"}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Keep Controlled</MonoLabel>
+            {linked?.controlledElements && linked.controlledElements.length > 0 ? (
+              <ul className="flex flex-col gap-0.5 text-sm">
+                {linked.controlledElements.map((el) => (
+                  <li key={el} className="flex items-center gap-2">
+                    <span className="size-1 rounded-full bg-muted-foreground" />
+                    {el}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No controlled elements recorded on the linked hypothesis yet.
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-start gap-2 border-t border-border pt-3 text-sm">
+          <AlertTriangle className="size-4 shrink-0 text-muted-foreground" />
+          <span className="text-muted-foreground">
+            No deviations detected. Recording briefs mark VARIABLE vs CONTROLLED sections so each variant preserves the design.
+          </span>
+        </div>
+      </section>
+
+      <section data-testid="variant-cards" className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {experiment.variants.map((v) => {
+          const isNext = v.role === nextVariant?.role;
+          const isLive = v.status === "tracking" || v.status === "completed";
+          const hoursLeft = trackingHoursRemaining(v, experiment.trackingWindowHours);
+          return (
+            <div
+              key={v.role}
+              className={`flex h-full flex-col bg-card ${
+                isNext ? "border-2 border-primary" : "border border-border"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 border-b border-border bg-secondary p-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex size-7 items-center justify-center bg-primary font-mono text-xs text-primary-foreground">
+                    {v.role}
+                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold">{v.title}</span>
+                    <MonoLabel>{v.roleLabel}</MonoLabel>
+                  </div>
+                </div>
+                <StatusPill tone={variantTone(v.status)}>
+                  {variantStatusLabel(v.status)}
+                </StatusPill>
+              </div>
+              <div className="flex flex-1 flex-col gap-3 p-3">
+                <div className="flex flex-col gap-1">
+                  <MonoLabel>Variable Value</MonoLabel>
+                  <p className="text-sm">{v.variableUnderTest}</p>
+                </div>
+                {v.status === "completed" && v.metrics && (
+                  <div className="grid grid-cols-2 gap-2 border border-border bg-secondary p-2 font-mono text-xs">
+                    <div className="flex flex-col">
+                      <MonoLabel>Views</MonoLabel>
+                      <span>{v.metrics.views.toLocaleString()}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <MonoLabel>Clicks / 1K</MonoLabel>
+                      <span>{clicksPer1k(v.metrics.views, v.metrics.clicks)}</span>
+                    </div>
+                  </div>
+                )}
+                {v.status === "tracking" && (
+                  <div className="flex flex-col gap-1 border border-border bg-secondary p-2 text-xs">
+                    <MonoLabel>Tracking</MonoLabel>
+                    <span>
+                      {hoursLeft === null
+                        ? "Tracking window active"
+                        : hoursLeft === 0
+                          ? "Window ended — refresh metrics"
+                          : `Ends in ${hoursLeft}h`}
+                    </span>
+                  </div>
+                )}
+                {isNext && v.status === "ready_to_record" && (
+                  <div className="mt-auto flex flex-col gap-1">
+                    <MonoLabel>Paste TikTok URL to start tracking</MonoLabel>
+                    <Input
+                      value={urlDraft}
+                      onChange={(e) => {
+                        setUrlDraft(e.target.value);
+                        setUrlError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") submitUrl(v.role);
+                      }}
+                      placeholder="Paste TikTok URL..."
+                      className="text-sm"
+                    />
+                    {urlError && <p className="text-xs text-destructive">{urlError}</p>}
+                    <Button size="sm" variant="outline" className="mt-1" onClick={() => submitUrl(v.role)}>
+                      Start Tracking
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 border-t border-border p-3">
+                {v.status === "completed" ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/insights?ex=${v.role}`}>View Observation</Link>
+                  </Button>
+                ) : v.status === "tracking" ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/videos">View Tracking</Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button asChild size="sm">
+                      <Link href={`/campaigns/brief/${v.role.toLowerCase()}`}>
+                        Review Variant
+                      </Link>
+                    </Button>
+                    <Button size="sm" variant="outline" className="gap-1" onClick={() => copyHook(v.role, v.hook)}>
+                      {copiedRole === v.role ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                      {copiedRole === v.role ? "Copied!" : "Copy Hook"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      <section
+        data-testid="experiment-timeline"
+        className="flex flex-col gap-3 border border-border bg-card p-5"
+      >
+        <div className="flex items-center gap-2">
+          <ClipboardList className="size-4 text-muted-foreground" />
+          <MonoLabel>Experiment Timeline</MonoLabel>
+        </div>
+        <ul className="flex flex-col gap-1.5 text-sm">
+          {experiment.variants.flatMap((v) => timelineEventsFor(v)).map((ev, idx) => (
+            <li
+              key={`${ev.role}-${ev.label}-${idx}`}
+              className="flex items-center gap-3 border border-border p-2"
+            >
+              <span
+                className={`size-2 rounded-full ${ev.done ? "bg-success" : "bg-muted-foreground"}`}
+                aria-hidden
+              />
+              <span className="font-mono text-xs">{ev.label}</span>
+              <span className="ml-auto">
+                {ev.done ? (
+                  <StatusPill tone="success">Done</StatusPill>
+                ) : (
+                  <StatusPill tone="idle">Pending</StatusPill>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {primaryAction && (
+        <section
+          data-testid="primary-action-strip"
+          className="flex flex-col items-start gap-3 border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex flex-col gap-1">
+            <MonoLabel>Primary Action</MonoLabel>
+            <span className="text-sm">
+              {allCompleted
+                ? "All tracking windows are complete."
+                : "Only one dominant action for now — keep the experiment moving."}
+            </span>
+          </div>
+          <Button asChild className="gap-2">
+            <Link href={primaryAction.href}>
+              {primaryAction.label}
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        </section>
+      )}
+      {!primaryAction && anyCompleted === false && (
+        <section className="flex items-start gap-2 border border-dashed border-border bg-card p-4 text-xs text-muted-foreground">
+          <ClipboardList className="size-4" />
+          <span>
+            All variants are tracking. Once every 72h window ends, results appear here.
+          </span>
+        </section>
+      )}
     </>
   );
 }

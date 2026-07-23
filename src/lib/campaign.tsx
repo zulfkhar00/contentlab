@@ -1,5 +1,11 @@
 "use client";
 
+// NOTE(vocabulary-shim): the file name stays `campaign.tsx` for now but the
+// exports use the correct product vocabulary — Experiment, not Campaign.
+// core_ideas.md renames the entity: one Hypothesis maps to exactly one
+// Experiment with three Variants, and "campaign" is retired. Renaming the
+// file itself is a follow-up when the Experiment Workspace screen ships.
+
 import {
   createContext,
   useContext,
@@ -37,8 +43,8 @@ export type Variant = {
   publishedAt?: string;
 };
 
-// Segments that stay identical across all three variants, per the brief's
-// "keep everything but the primary variable constant" rule.
+// Segments that stay identical across all three variants, per the "keep
+// everything but the primary variable constant" rule.
 export type LockedScript = {
   lesson: string;
   product: string;
@@ -46,7 +52,7 @@ export type LockedScript = {
   targetDurationLabel: string;
 };
 
-export type CampaignData = {
+export type ExperimentData = {
   name: string;
   hypothesis: string;
   primaryMetric: string;
@@ -57,11 +63,11 @@ export type CampaignData = {
   variants: [Variant, Variant, Variant];
 };
 
-// The brief's authoritative demo campaign — exact hooks, roles, and order.
+// The brief's authoritative demo experiment — exact hooks, roles, and order.
 // A function (not a constant) so Variant A's seed publishedAt is always a
 // real, fresh "a few hours ago" timestamp instead of a fixed date that would
 // drift stale over calendar time.
-function createDefaultCampaign(): CampaignData {
+function createDefaultExperiment(): ExperimentData {
   return {
     name: "Founder Failure Hook vs Product Demo",
     hypothesis:
@@ -120,7 +126,7 @@ function createDefaultCampaign(): CampaignData {
   };
 }
 
-export type CampaignStatus = "ready" | "in_progress" | "tracking";
+export type ExperimentStatus = "ready" | "in_progress" | "tracking";
 
 const LIVE_STATUSES: VariantStatus[] = ["tracking", "completed"];
 
@@ -128,18 +134,17 @@ export function getPublishedCount(variants: Variant[]): number {
   return variants.filter((v) => LIVE_STATUSES.includes(v.status)).length;
 }
 
-// Brief lifecycle: Ready (nothing published) -> In Progress (1-2 published)
-// -> Tracking (all 3 published, windows active) -> Analyzing -> Completed.
-// Analyzing/Completed require a real time-based window and aren't modeled
-// yet (see CONTENT_LAB_PLAN.md phase 8).
-export function getCampaignStatus(variants: Variant[]): CampaignStatus {
+// Ready (nothing published) -> In Progress (1-2 published) -> Tracking (all 3
+// published, windows active) -> Analyzing -> Completed. Analyzing/Completed
+// require a real time-based window and aren't modeled yet.
+export function getExperimentStatus(variants: Variant[]): ExperimentStatus {
   const live = getPublishedCount(variants);
   if (live === 0) return "ready";
   if (live < variants.length) return "in_progress";
   return "tracking";
 }
 
-export function campaignStatusLabel(status: CampaignStatus): string {
+export function experimentStatusLabel(status: ExperimentStatus): string {
   return status === "ready"
     ? "Ready"
     : status === "in_progress"
@@ -178,11 +183,11 @@ export function isValidTiktokUrl(url: string): boolean {
 }
 
 export function getVariant(
-  campaign: CampaignData,
+  experiment: ExperimentData,
   role: string | undefined,
 ): Variant | null {
   const upper = role?.toUpperCase();
-  return campaign.variants.find((v) => v.role === upper) ?? null;
+  return experiment.variants.find((v) => v.role === upper) ?? null;
 }
 
 export function formatTimestamp(iso: string): string {
@@ -219,22 +224,30 @@ export function getTrackingWindow(
   };
 }
 
-const STORAGE_KEY = "cl_campaign";
+const STORAGE_KEY = "cl_experiment";
+const LEGACY_STORAGE_KEY = "cl_campaign";
 
-function load(): CampaignData {
-  if (typeof window === "undefined") return createDefaultCampaign();
+function load(): ExperimentData {
+  if (typeof window === "undefined") return createDefaultExperiment();
   try {
+    // One-shot migration from the old key. Runs on first mount after the
+    // rename; subsequent loads read from cl_experiment directly.
+    const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy && !window.localStorage.getItem(STORAGE_KEY)) {
+      window.localStorage.setItem(STORAGE_KEY, legacy);
+      window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+    }
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return createDefaultCampaign();
+    if (!raw) return createDefaultExperiment();
     return JSON.parse(raw);
   } catch {
-    return createDefaultCampaign();
+    return createDefaultExperiment();
   }
 }
 
-function persist(c: CampaignData) {
+function persist(e: ExperimentData) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(e));
 }
 
 export type VariantBriefEdit = Pick<
@@ -242,30 +255,30 @@ export type VariantBriefEdit = Pick<
   "hook" | "hookDeliveryNote" | "context" | "onScreenText"
 >;
 
-type CampaignContextValue = {
-  campaign: CampaignData;
+type ExperimentContextValue = {
+  experiment: ExperimentData;
   loaded: boolean;
   startTracking: (role: VariantRole, url: string) => void;
   updateVariantBrief: (role: VariantRole, edit: VariantBriefEdit) => void;
 };
 
-const Ctx = createContext<CampaignContextValue | null>(null);
+const Ctx = createContext<ExperimentContextValue | null>(null);
 
-// TODO(api): replace localStorage with real campaign/variant/scrape-job
-// endpoints once the backend exists (see CONTENT_LAB_PLAN.md phases 4 & 7).
-// A single provider keeps Overview and Campaigns showing one consistent,
-// live campaign instead of each holding its own stale copy.
-export function CampaignProvider({ children }: { children: ReactNode }) {
-  const [campaign, setCampaignState] = useState<CampaignData>(createDefaultCampaign);
+// TODO(api): replace localStorage with real experiment/variant/scrape-job
+// endpoints once the backend exists. A single provider keeps Overview and
+// Experiments showing one consistent, live experiment instead of each
+// holding its own stale copy.
+export function ExperimentProvider({ children }: { children: ReactNode }) {
+  const [experiment, setExperimentState] = useState<ExperimentData>(createDefaultExperiment);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setCampaignState(load());
+    setExperimentState(load());
     setLoaded(true);
   }, []);
 
   function startTracking(role: VariantRole, url: string) {
-    setCampaignState((prev) => {
+    setExperimentState((prev) => {
       const idx = prev.variants.findIndex((v) => v.role === role);
       if (idx === -1) return prev;
       const variants = prev.variants.map((v, i) => {
@@ -291,7 +304,7 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
   }
 
   function updateVariantBrief(role: VariantRole, edit: VariantBriefEdit) {
-    setCampaignState((prev) => {
+    setExperimentState((prev) => {
       const variants = prev.variants.map((v) =>
         v.role === role ? { ...v, ...edit } : v,
       ) as [Variant, Variant, Variant];
@@ -303,17 +316,17 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider
-      value={{ campaign, loaded, startTracking, updateVariantBrief }}
+      value={{ experiment, loaded, startTracking, updateVariantBrief }}
     >
       {children}
     </Ctx.Provider>
   );
 }
 
-export function useCampaign(): CampaignContextValue {
+export function useExperiment(): ExperimentContextValue {
   const value = useContext(Ctx);
   if (!value) {
-    throw new Error("useCampaign must be used within a CampaignProvider");
+    throw new Error("useExperiment must be used within an ExperimentProvider");
   }
   return value;
 }
