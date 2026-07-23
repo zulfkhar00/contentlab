@@ -518,6 +518,98 @@ expect(
 await page.locator('[data-view-choice="library"]').click();
 await page.waitForTimeout(150);
 
+// ---------- /experiments/observe/[role]: S9 Variant Observation ----------
+await page.goto("http://localhost:3000/experiments", { waitUntil: "networkidle" });
+await page.waitForTimeout(300);
+const expKey = "cl_experiment";
+await page.evaluate(([key, url]) => {
+  const raw = window.localStorage.getItem(key);
+  const data = raw ? JSON.parse(raw) : {
+    name: "Stub Experiment",
+    hypothesis: "Stub hypothesis.",
+    primaryMetric: "Metric A",
+    cta: "CTA",
+    trackingWindowLabel: "72h",
+    trackingWindowHours: 72,
+    script: { lesson: "", product: "", cta: "", targetDurationLabel: "50s" },
+    variants: [
+      { role: "A", title: "Product Demo", roleLabel: "Control",
+        hook: "", hookDeliveryNote: "", context: "",
+        variableUnderTest: "Product-first opening",
+        onScreenText: "", status: "tracking",
+        publishedAt: new Date(Date.now() - 4*3600000).toISOString() },
+      { role: "B", title: "Founder Story", roleLabel: "Hypothesis Treatment",
+        hook: "", hookDeliveryNote: "", context: "",
+        variableUnderTest: "Founder-failure opening",
+        onScreenText: "", status: "ready_to_record" },
+      { role: "C", title: "Contrarian", roleLabel: "Alternative Treatment",
+        hook: "", hookDeliveryNote: "", context: "",
+        variableUnderTest: "Contrarian opening",
+        onScreenText: "", status: "queued" },
+    ],
+  };
+  const v = data.variants.find((v) => v.role === "A");
+  if (v) v.tiktokUrl = url;
+  window.localStorage.setItem(key, JSON.stringify(data));
+}, [expKey, "https://www.tiktok.com/@test/video/12345"]);
+await page.goto("http://localhost:3000/experiments/observe/a", { waitUntil: "networkidle" });
+await page.waitForTimeout(400);
+expect(
+  "/experiments/observe/a: observe-page testid exists",
+  (await page.getByTestId("observe-page").count()) === 1,
+);
+expect(
+  "/experiments/observe/a: video-embed-zone testid exists",
+  (await page.getByTestId("video-embed-zone").count()) === 1,
+);
+expect(
+  "/experiments/observe/a: observation-delivered testid exists",
+  (await page.getByTestId("observation-delivered").count()) === 1,
+);
+expect(
+  "/experiments/observe/a: observation-notes testid exists",
+  (await page.getByTestId("observation-notes").count()) === 1,
+);
+expect(
+  "/experiments/observe/a: observation-signals testid exists",
+  (await page.getByTestId("observation-signals").count()) === 1,
+);
+await page.getByTestId("obs-notes").fill("Hook landed well within first 3 seconds.");
+await page.waitForTimeout(300);
+const savedNotes = await page.evaluate(() => {
+  const raw = window.localStorage.getItem("cl_experiment");
+  if (!raw) return null;
+  const data = JSON.parse(raw);
+  const v = data.variants.find((v) => v.role === "A");
+  return v?.observation?.notes ?? null;
+});
+expect(
+  "/experiments/observe/a: notes round-trip to localStorage",
+  savedNotes === "Hook landed well within first 3 seconds.",
+  `saw: ${savedNotes}`,
+);
+await page.locator('[data-delivered-choice="true"]').click();
+await page.waitForTimeout(200);
+const savedDelivered = await page.evaluate(() => {
+  const raw = window.localStorage.getItem("cl_experiment");
+  if (!raw) return null;
+  const data = JSON.parse(raw);
+  return data.variants.find((v) => v.role === "A")?.observation?.deliveredVariable ?? null;
+});
+expect(
+  "/experiments/observe/a: deliveredVariable persisted as true",
+  savedDelivered === true,
+  `saw: ${savedDelivered}`,
+);
+await page.goto("http://localhost:3000/experiments", { waitUntil: "networkidle" });
+await page.waitForTimeout(300);
+const observedBadge = await page.getByTestId("observed-badge-A").count();
+expect(
+  "/experiments: Observed badge on Variant A after notes saved",
+  observedBadge === 1,
+  `count=${observedBadge}`,
+);
+
 // ---------- Verdict ----------
 console.log("\n---");
 console.log(`Total console errors observed: ${consoleErrors.length}`);

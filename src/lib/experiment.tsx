@@ -37,6 +37,7 @@ export type Variant = {
   status: VariantStatus;
   tiktokUrl?: string;
   metrics?: VariantMetrics;
+  observation?: VariantObservation;
   // Set the moment a variant starts tracking — real wall-clock time, not
   // seed data — so the tracking window can be computed honestly instead of
   // faking elapsed/remaining numbers.
@@ -255,11 +256,25 @@ export type VariantBriefEdit = Pick<
   "hook" | "hookDeliveryNote" | "context" | "onScreenText"
 >;
 
+export type VariantObservation = {
+  deliveredVariable: boolean | null;
+  reason: string;
+  notes: string;
+  dropOffAt: string;
+  sentiment: string;
+  unexpected: string;
+};
+
+export function emptyObservation(): VariantObservation {
+  return { deliveredVariable: null, reason: "", notes: "", dropOffAt: "", sentiment: "", unexpected: "" };
+}
+
 type ExperimentContextValue = {
   experiment: ExperimentData;
   loaded: boolean;
   startTracking: (role: VariantRole, url: string) => void;
   updateVariantBrief: (role: VariantRole, edit: VariantBriefEdit) => void;
+  updateVariantObservation: (role: VariantRole, obs: Partial<VariantObservation>) => void;
 };
 
 const Ctx = createContext<ExperimentContextValue | null>(null);
@@ -314,9 +329,22 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  function updateVariantObservation(role: VariantRole, obs: Partial<VariantObservation>) {
+    setExperimentState((prev) => {
+      const variants = prev.variants.map((v) =>
+        v.role === role
+          ? { ...v, observation: { ...(v.observation ?? emptyObservation()), ...obs } }
+          : v,
+      ) as [Variant, Variant, Variant];
+      const next = { ...prev, variants };
+      persist(next);
+      return next;
+    });
+  }
+
   return (
     <Ctx.Provider
-      value={{ experiment, loaded, startTracking, updateVariantBrief }}
+      value={{ experiment, loaded, startTracking, updateVariantBrief, updateVariantObservation }}
     >
       {children}
     </Ctx.Provider>

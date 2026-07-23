@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Copy, Check, ClipboardList, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Copy, Check, ClipboardCheck, ClipboardList, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -327,13 +327,35 @@ export default function ExperimentWorkspacePage() {
               </div>
               <div className="flex flex-col gap-2 border-t border-border p-3">
                 {v.status === "completed" ? (
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/insights?ex=${v.role}`}>View Observation</Link>
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    {v.observation?.notes && (
+                      <div className="flex items-center gap-1">
+                        <ClipboardCheck className="size-3.5 text-success" />
+                        <span className="font-mono text-[10px] uppercase tracking-wide text-success" data-testid={`observed-badge-${v.role}`}>Observed</span>
+                      </div>
+                    )}
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/experiments/observe/${v.role.toLowerCase()}`}>Log Observation</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/insights?ex=${v.role}`}>View Results</Link>
+                    </Button>
+                  </div>
                 ) : v.status === "tracking" ? (
-                  <Button asChild size="sm" variant="outline">
-                    <Link href="/videos">View Tracking</Link>
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    {v.observation?.notes && (
+                      <div className="flex items-center gap-1">
+                        <ClipboardCheck className="size-3.5 text-success" />
+                        <span className="font-mono text-[10px] uppercase tracking-wide text-success" data-testid={`observed-badge-${v.role}`}>Observed</span>
+                      </div>
+                    )}
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/experiments/observe/${v.role.toLowerCase()}`}>Log Observation</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/videos">View Tracking</Link>
+                    </Button>
+                  </div>
                 ) : (
                   <>
                     <Button asChild size="sm">
