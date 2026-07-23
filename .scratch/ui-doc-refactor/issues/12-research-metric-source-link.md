@@ -1,6 +1,6 @@
 # /research: primaryMetric on cards not linked to experiment or hypothesis source (S14 follow-up)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Principle d failure: numbers must always be paired with the hypothesis they came from.
@@ -15,3 +15,5 @@ or add a link to the insight that produced the number.
 
 Done when the metric label on cards for learned/testing hypotheses is paired with a source reference
 and diag_full.mjs remains GREEN.
+
+Resolved in commit bb0b73a.

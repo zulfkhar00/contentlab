@@ -1,6 +1,6 @@
 # /overview: question header + learning-before-CTA order + hardcoded KPIs (S14 follow-up)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Three principle failures found during S14 audit:
@@ -16,3 +16,5 @@ c. The four top KPI tiles (Published Videos, Product Clicks, Completed Experimen
    are hardcoded stubs. They must pull from real experiment and hypothesis store data.
 
 Done when all three fixes are applied and diag_full.mjs remains GREEN.
+
+Resolved in commit bb0b73a.

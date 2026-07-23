@@ -1,6 +1,6 @@
 # /insights: no header question + candidate cards carry co-equal CTAs (S14 follow-up)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Two principle failures found during S14 audit:
@@ -14,3 +14,5 @@ b. Three Next Hypothesis Candidate cards each carry a "Review Hypothesis" CTA of
    to outline style so one choice is visually dominant.
 
 Done when both fixes are in and diag_full.mjs remains GREEN.
+
+Resolved in commit bb0b73a.

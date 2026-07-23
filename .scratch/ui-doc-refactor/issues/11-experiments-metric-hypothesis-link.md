@@ -1,6 +1,6 @@
 # /experiments: variant metric cards do not surface the hypothesis they test (S14 follow-up)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Principle d failure: numbers must always be paired with the hypothesis they came from.
@@ -16,3 +16,5 @@ or displays the variable under test next to the metric numbers, so the founder n
 without knowing what question it is answering.
 
 Done when variant metric cards include a visible hypothesis or variable reference and diag_full.mjs remains GREEN.
+
+Resolved in commit bb0b73a.

@@ -1,6 +1,6 @@
 # Publication and Execution Check (S8)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Full spec for this feature is section S8 of the actionable UX markdown at repo root.
@@ -16,3 +16,5 @@ Done when:
   a. Modal appears after Publish click
   b. diag_full.mjs walks through the modal for one variant
   c. Zero console errors and no layout shift after open
+
+Resolved in commit d02e60b.

@@ -1,6 +1,6 @@
 # Variant Observation view (S9)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Doc S9 asks for a per-variant Video Observation view during a running experiment. Founder logs qualitative observations and marks whether the variant delivered the variable as intended.
@@ -21,3 +21,5 @@ Done when:
 - Observations round-trip through localStorage
 - Variant card shows an Observed badge when variant.observation.notes is non-empty
 - diag_full.mjs adds a check that visits the observe route and edits the observation
+
+Resolved in commit 6901246.

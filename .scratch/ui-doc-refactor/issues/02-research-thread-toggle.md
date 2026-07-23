@@ -1,6 +1,6 @@
 # Research Thread toggle inside /research
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Doc S13 asks for a Research Thread view that visualizes hypothesis lineage as a chain from root to follow-ups to current node. Data exists (parentInsightId on hypotheses, nextCandidates on insights). UI is missing.
@@ -19,3 +19,5 @@ Done when:
 - Nodes render for every hypothesis with parentInsightId
 - diag_full.mjs gains a check that toggles the view and finds a lineage edge
 - Zero console errors on toggle
+
+Resolved in commit eb64ec2.

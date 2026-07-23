@@ -1,6 +1,6 @@
 # /videos: full screen rewrite — question, dominant CTA, real KPIs (S14 follow-up)
 
-Status: ready-for-agent
+Status: done
 Type: task
 
 Three principle failures on the Videos screen (the thinnest screen in the app):
@@ -15,3 +15,5 @@ c. Four KPI tiles at the top (Published Videos: 12, Currently Tracking: 3, Total
    They must derive from the real experiment variant data in the ExperimentProvider store.
 
 Done when all three fixes are in and diag_full.mjs remains GREEN.
+
+Resolved in commit bb0b73a.
