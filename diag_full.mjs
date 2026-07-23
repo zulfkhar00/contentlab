@@ -610,6 +610,56 @@ expect(
   `count=${observedBadge}`,
 );
 
+// ---------- /experiments/brief/[role]: Publication Execution Check modal (S8) ----------
+// Variant B is ready_to_record — get it to stage=recorded then submit URL to trigger modal.
+await page.goto("http://localhost:3000/experiments/brief/b", { waitUntil: "networkidle" });
+await page.waitForTimeout(300);
+// Click through approval stages
+await page.getByRole("button", { name: /^Approve for Recording$/ }).click();
+await page.waitForTimeout(150);
+await page.getByRole("button", { name: /I Have Recorded This Variant/ }).click();
+await page.waitForTimeout(150);
+// Paste a fake but valid-shaped URL so isValidTiktokUrl passes
+const fakePubUrl = "https://www.tiktok.com/@acme/video/99999";
+await page.getByPlaceholder("Paste TikTok URL...").fill(fakePubUrl);
+await page.waitForTimeout(100);
+await page.getByRole("button", { name: /Start Tracking/ }).click();
+await page.waitForTimeout(300);
+expect(
+  "/brief: publication check modal opens after Start Tracking",
+  (await page.getByTestId("publish-check-modal").count()) === 1,
+);
+// Confirm button should be disabled with no boxes checked.
+const confirmBtn = page.getByTestId("pub-check-confirm");
+const isDisabled = await confirmBtn.isDisabled();
+expect(
+  "/brief: Confirm button disabled when no boxes checked",
+  isDisabled,
+);
+// Check all three boxes.
+await page.getByTestId("pub-check-videoLive").locator("input").check();
+await page.getByTestId("pub-check-variableDelivered").locator("input").check();
+await page.getByTestId("pub-check-controlledPreserved").locator("input").check();
+await page.waitForTimeout(100);
+const isEnabled = await confirmBtn.isEnabled();
+expect(
+  "/brief: Confirm button enabled after all boxes checked",
+  isEnabled,
+);
+// Confirm — should close modal and start tracking.
+await confirmBtn.click();
+await page.waitForTimeout(300);
+const modalGone = (await page.getByTestId("publish-check-modal").count()) === 0;
+expect("/brief: modal closes after confirmation", modalGone);
+const trackingStarted = await page.evaluate(() => {
+  const raw = window.localStorage.getItem("cl_experiment");
+  if (!raw) return false;
+  const data = JSON.parse(raw);
+  const v = data.variants.find((v) => v.role === "B");
+  return v?.status === "tracking";
+});
+expect("/brief: variant B status becomes tracking after confirmation", trackingStarted, `trackingStarted=${trackingStarted}`);
+
 // ---------- Verdict ----------
 console.log("\n---");
 console.log(`Total console errors observed: ${consoleErrors.length}`);

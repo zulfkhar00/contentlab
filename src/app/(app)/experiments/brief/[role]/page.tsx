@@ -100,6 +100,8 @@ export default function RecordingBriefPage() {
   const [revision, setRevision] = useState<VariantBriefEdit | null>(null);
   const [stage, setStage] = useState<ApprovalStage>("pending");
   const [factState, setFactState] = useState<"unknown" | "confirmed" | "flagged">("unknown");
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [pubChecks, setPubChecks] = useState({ videoLive: false, variableDelivered: false, controlledPreserved: false });
 
   if (!variant) {
     return (
@@ -149,8 +151,14 @@ export default function RecordingBriefPage() {
       return;
     }
     setUrlError(null);
-    startTracking(role, trimmed);
+    setPubChecks({ videoLive: false, variableDelivered: false, controlledPreserved: false });
+    setShowPublishModal(true);
+  }
+
+  function confirmPublish(role: VariantRole) {
+    startTracking(role, urlDraft.trim());
     setUrlDraft("");
+    setShowPublishModal(false);
     setStage("published");
   }
 
@@ -388,6 +396,48 @@ export default function RecordingBriefPage() {
           <Button onClick={rewriteBrief} className="font-mono text-xs">Rewrite Brief</Button>
         </div>
       </section>
+
+      {showPublishModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="publish-check-modal">
+          <div className="flex w-full max-w-md flex-col gap-5 border border-border bg-card p-6 shadow-lg">
+            <div className="flex flex-col gap-1">
+              <MonoLabel>Publication Execution Check</MonoLabel>
+              <h3 className="text-lg font-semibold tracking-tight">Confirm before tracking starts</h3>
+              <p className="text-sm text-muted-foreground">All three must be true before the tracking window opens.</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              {([
+                { key: "videoLive" as const, label: "Video is live at the URL I entered" },
+                { key: "variableDelivered" as const, label: "I delivered the variable as written" },
+                { key: "controlledPreserved" as const, label: "I did not alter any controlled elements" },
+              ]).map(({ key, label }) => (
+                <label key={key} className="flex cursor-pointer items-start gap-3" data-testid={`pub-check-${key}`}>
+                  <input
+                    type="checkbox"
+                    checked={pubChecks[key]}
+                    onChange={(e) => setPubChecks((prev) => ({ ...prev, [key]: e.target.checked }))}
+                    className="mt-0.5 size-4 accent-primary"
+                  />
+                  <span className="text-sm">{label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                data-testid="pub-check-confirm"
+                onClick={() => confirmPublish(variant!.role)}
+                disabled={!pubChecks.videoLive || !pubChecks.variableDelivered || !pubChecks.controlledPreserved}
+                className="flex-1"
+              >
+                Confirm &amp; Start Tracking
+              </Button>
+              <Button variant="outline" onClick={() => setShowPublishModal(false)} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
