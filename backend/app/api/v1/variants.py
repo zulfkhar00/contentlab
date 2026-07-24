@@ -178,7 +178,7 @@ async def get_video(
     return VideoResponse(**row)
 
 
-@video_router.post("/{video_id}/submit-url", response_model=VideoResponse)
+@video_router.post("/{video_id}/submit-url", response_model=VideoResponse, status_code=202)
 async def submit_url(
     video_id: UUID,
     body: SubmitUrlRequest,
@@ -224,3 +224,152 @@ async def upsert_observation(
         raise HTTPException(status_code=404, detail=f"Video {video_id} not found")
     row = await repo.upsert_observation(scope, video_id, body.model_dump(exclude_none=True))
     return ObservationResponse(**row)
+
+
+# ── Video retry ───────────────────────────────────────────────────────────────
+
+@video_router.post("/{video_id}/retry", response_model=VideoResponse, status_code=201)
+async def retry_video(
+    video_id: UUID,
+    scope: ProjectScope = Depends(get_project_scope),
+    db: AsyncSession = Depends(get_db),
+) -> VideoResponse:
+    """
+    Retry a Video that is in a terminal failure state.
+
+    1. Requires Video.status to be a terminal error (invalid_url, video_private, etc.)
+    2. Marks the old attempt is_current = false
+    3. Creates next attempt with status = needs_url, is_current = true
+    4. Preserves previous attempts for audit history
+    """
+    from sqlalchemy import text
+
+    _TERMINAL_STATUSES = {
+        "invalid_url", "account_mismatch", "video_private",
+        "video_deleted", "tracking_failed",
+    }
+
+    row = await VideoRepository(db).get(scope, video_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Video {video_id} not found")
+    if row["status"] not in _TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Video status must be a terminal error to retry, got: {row['status']}"
+        )
+
+    variant_id = row["variant_id"]
+    next_attempt = row["attempt_number"] + 1
+
+    # Mark old attempt no longer current
+    await db.execute(
+        text("UPDATE videos SET is_current = false WHERE id = :vid AND project_id = :pid"),
+        {"vid": video_id, "pid": str(scope.project_id)},
+    )
+
+    # Create new attempt
+    new_r = await db.execute(
+        text(
+            "INSERT INTO videos "
+            "(project_id, variant_id, attempt_number, is_current, status) "
+            "VALUES (:pid, :vrid, :att, true, 'needs_url') "
+            "RETURNING *"
+        ),
+        {
+            "pid": str(scope.project_id),
+            "vrid": str(variant_id),
+            "att": next_attempt,
+        },
+    )
+    new_row = dict(new_r.mappings().first())
+    await db.commit()
+
+    return VideoResponse(**new_row)
+
+
+# ── Tracking reads ─────────────────────────────────────────────────────────────
+
+@video_router.get("/{video_id}/metrics")
+async def get_video_metrics(
+    video_id: UUID,
+    scope: ProjectScope = Depends(get_project_scope),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Backend-computed metric summary for one Video:
+      - baseline snapshot (first collected)
+      - latest snapshot
+      - views_delta, likes_delta, comments_delta
+      - unique attributed click count
+      - attribution window status + countdown
+    """
+    from sqlalchemy import text
+
+    vid = await VideoRepository(db).get(scope, video_id)
+    if not vid:
+        raise HTTPException(status_code=404, detail=f"Video {video_id} not found")
+
+    snapshots_r = await db.execute(
+        text(
+            "SELECT id, collected_at, views, likes, comments "
+            "FROM video_metric_snapshots "
+            "WHERE video_id = :vid AND project_id = :pid "
+            "ORDER BY collected_at ASC"
+        ),
+        {"vid": str(video_id), "pid": str(scope.project_id)},
+    )
+    snapshots = [dict(r) for r in snapshots_r.mappings()]
+
+    baseline = snapshots[0] if snapshots else None
+    latest = snapshots[-1] if snapshots else None
+
+    window_r = await db.execute(
+        text(
+            "SELECT id, status, starts_at, ends_at FROM attribution_windows "
+            "WHERE video_id = :vid AND project_id = :pid ORDER BY created_at DESC LIMIT 1"
+        ),
+        {"vid": str(video_id), "pid": str(scope.project_id)},
+    )
+    window = window_r.mappings().first()
+
+    unique_clicks = 0
+    if window:
+        clicks_r = await db.execute(
+            text(
+                "SELECT COUNT(*) FROM redirect_events "
+                "WHERE attribution_window_id = :wid AND is_unique = true AND project_id = :pid"
+            ),
+            {"wid": str(window["id"]), "pid": str(scope.project_id)},
+        )
+        unique_clicks = int(clicks_r.scalar() or 0)
+
+    views_delta = None
+    if baseline and latest and baseline["id"] != latest["id"]:
+        views_delta = max(0, int(latest["views"]) - int(baseline["views"]))
+
+    return {
+        "video_id": str(video_id),
+        "status": vid["status"],
+        "attempt_number": vid["attempt_number"],
+        "baseline": {
+            "views": int(baseline["views"]) if baseline else None,
+            "likes": int(baseline["likes"]) if baseline else None,
+            "comments": int(baseline["comments"]) if baseline else None,
+            "collected_at": baseline["collected_at"].isoformat() if baseline else None,
+        } if baseline else None,
+        "latest": {
+            "views": int(latest["views"]) if latest else None,
+            "likes": int(latest["likes"]) if latest else None,
+            "comments": int(latest["comments"]) if latest else None,
+            "collected_at": latest["collected_at"].isoformat() if latest else None,
+        } if latest else None,
+        "views_delta": views_delta,
+        "unique_attributed_clicks": unique_clicks,
+        "attribution_window": {
+            "id": str(window["id"]),
+            "status": window["status"],
+            "starts_at": window["starts_at"].isoformat(),
+            "ends_at": window["ends_at"].isoformat(),
+        } if window else None,
+    }
+

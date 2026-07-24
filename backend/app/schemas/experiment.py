@@ -38,7 +38,7 @@ class ExperimentResponse(BaseModel):
     project_id: UUID
     hypothesis_id: UUID
     name: str
-    tracking_window_hours: int
+    tracking_window_hours: float
     status: str
     hypothesis_design_snapshot: dict
     shared_constraints: dict

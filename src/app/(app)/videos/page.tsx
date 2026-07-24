@@ -1,3 +1,4 @@
+import React from "react";
 "use client";
 
 import { useState } from "react";
@@ -26,6 +27,27 @@ function StatusDot({ tone }: { tone: "active" | "idle" }) {
     <span
       className={`size-1.5 rounded-full ${tone === "active" ? "bg-success" : "bg-border"}`}
     />
+  );
+}
+
+function WindowCountdown({ endsAt }: { endsAt: string | null }) {
+  const [label, setLabel] = React.useState("");
+  React.useEffect(() => {
+    if (!endsAt) return;
+    function tick() {
+      const ms = new Date(endsAt!).getTime() - Date.now();
+      if (ms <= 0) { setLabel("Closing…"); return; }
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      setLabel(`${h}h ${m}m remaining`);
+    }
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+  }, [endsAt]);
+  if (!endsAt || !label) return null;
+  return (
+    <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{label}</span>
   );
 }
 
@@ -271,9 +293,19 @@ function VideoInspector({
                 {experimentName}
               </p>
             </div>
-            <span className="rounded border border-success/20 bg-[#ECFDF5] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-success">
-              {variantStatusLabel(variant.status)}
-            </span>
+            <div className="flex flex-col items-end gap-1">
+              <span className={[
+                "rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide",
+                variant.status === "validating"
+                  ? "border-amber-400/40 bg-amber-50 text-amber-700"
+                  : variant.status === "tracking_failed"
+                  ? "border-rose-400/40 bg-rose-50 text-rose-700"
+                  : "border-success/20 bg-[#ECFDF5] text-success",
+              ].join(" ")}>
+                {variantStatusLabel(variant.status)}
+              </span>
+              <WindowCountdown endsAt={(variant as { tracking_window_ends_at?: string | null }).tracking_window_ends_at ?? null} />
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <Button

@@ -35,6 +35,8 @@ class ApproveAndGenerateRequest(BaseModel):
     controlled_elements: list[str] | None = None
     contradiction_condition: str | None = None
     primary_metric: str | None = None
+    # Override the default 72h window; non-production only (for accelerated tests)
+    tracking_window_hours: float | None = None
 
 
 class HypothesisResponse(BaseModel):

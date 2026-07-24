@@ -141,8 +141,9 @@ class VariantService:
         confirmed_checks: dict,
     ) -> dict:
         """
-        Validate URL → set video tracking → create AttributionWindow →
-        transition experiment status.
+        Persist Video(status=validating) + enqueue validate_video job.
+        Returns the video row immediately (202 Accepted).
+        Actual validation and tracking setup happen in the worker.
         """
         video = await self._video_repo.get(scope, video_id)
         if not video:
@@ -150,65 +151,40 @@ class VariantService:
         if video["status"] != "needs_url":
             raise DomainError(f"Video is already in status: {video['status']}")
 
-        # Get project for handle check
         project_repo = ProjectRepository(self._db)
         project = await project_repo.get_by_scope(scope) or {}
         expected_handle = project.get("tiktok_handle", "")
 
-        result = _VALIDATOR.validate(url, expected_handle)
+        # Quick format check before enqueuing
+        from app.infrastructure.video_validator import FakeVideoValidator
+        result = FakeVideoValidator().validate(url, expected_handle)
         if not result.valid:
             raise DomainError(f"[{result.error_code}] {result.error_detail}")
 
         now = datetime.now(timezone.utc)
-        # Get tracking window hours from experiment
-        exp_result = await self._db.execute(
-            text("SELECT e.tracking_window_hours FROM experiments e JOIN variants v ON v.experiment_id = e.id WHERE v.id = :vid AND v.project_id = :pid"),
-            {"vid": video["variant_id"], "pid": scope.project_id},
-        )
-        exp_row = exp_result.first()
-        window_hours = int(exp_row[0]) if exp_row else 72
-        window_ends = now + timedelta(hours=window_hours)
-
         user_confirmed_at = now if confirmed_checks.get("video_live") else None
 
-        updated_video = await self._video_repo.update(
+        updated = await self._video_repo.update(
             scope, video_id,
             {
-                "status": "tracking",
+                "status": "validating",
                 "submitted_url": url,
-                "normalized_tiktok_url": result.normalized_tiktok_url,
-                "tiktok_video_id": result.tiktok_video_id,
-                "validated_at": now,
-                "tracking_started_at": now,
-                "tracking_window_ends_at": window_ends,
                 "user_confirmed_published_at": user_confirmed_at,
             },
         )
 
-        # Create AttributionWindow
+        # Enqueue validation job
+        import json as _json
+        from sqlalchemy import text
         await self._db.execute(
-            text(
-                "INSERT INTO attribution_windows "
-                "(project_id, experiment_id, variant_id, video_id, starts_at, ends_at, status) "
-                "SELECT :pid, v.experiment_id, v.id, :viid, :ts, :te, 'active' "
-                "FROM variants v WHERE v.id = :vaid AND v.project_id = :pid"
-            ),
+            text("SELECT enqueue_job(:type, :key, :payload, :etype, :eid, :pid, now(), 3)"),
             {
-                "pid": scope.project_id, "viid": video_id,
-                "vaid": video["variant_id"],
-                "ts": now, "te": window_ends,
+                "type": "validate_video",
+                "key": f"validate_video:{video_id}",
+                "payload": _json.dumps({"video_id": str(video_id), "project_id": str(scope.project_id)}),
+                "etype": "Video", "eid": str(video_id), "pid": str(scope.project_id),
             },
         )
-
-        # Transition experiment to tracking
-        await self._db.execute(
-            text(
-                "UPDATE experiments SET status = 'tracking' "
-                "WHERE id = (SELECT experiment_id FROM variants WHERE id = :vaid AND project_id = :pid) "
-                "AND project_id = :pid "
-                "AND status IN ('ready', 'in_progress')"
-            ),
-            {"vaid": video["variant_id"], "pid": scope.project_id},
-        )
         await self._db.commit()
-        return updated_video
+        return updated
+

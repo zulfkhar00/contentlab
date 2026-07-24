@@ -173,6 +173,7 @@ class HypothesisService:
         project: dict,
         facts: list[dict],
         provider,
+        tracking_window_hours: float | None = None,
     ) -> dict:
         """
         1. Read hypothesis (outside txn).
@@ -248,7 +249,7 @@ class HypothesisService:
 
         exp_data = {
             "name": exp_design["experiment_name"],
-            "tracking_window_hours": 72,
+            "tracking_window_hours": tracking_window_hours if tracking_window_hours is not None else 72,
             "status": "ready",
             "hypothesis_design_snapshot": json.dumps(snapshot),
             "shared_constraints": json.dumps(exp_design["shared_constraints"]),

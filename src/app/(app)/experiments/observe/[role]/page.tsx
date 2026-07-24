@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { videoApi } from "@/lib/api-client";
+import { useUpsertObservation } from "@/lib/query-hooks";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Eye } from "lucide-react";
@@ -34,7 +35,8 @@ function DeliveredToggle({ value, onChange }: { value: boolean | null; onChange:
 export default function ObservePage() {
   const params = useParams();
   const role = (typeof params?.role === "string" ? params.role : "").toUpperCase() as VariantRole;
-  const { experiment, loaded, updateVariantObservation } = useExperiment();
+  const { experiment, loaded } = useExperiment();
+  const upsertObservation = useUpsertObservation();
   if (!experiment) return (
     <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
       No active experiment.
@@ -50,7 +52,10 @@ export default function ObservePage() {
 
   function patch(update: Partial<VariantObservation>) {
     setObs((prev) => ({ ...prev, ...update }));
-    updateVariantObservation(role, update);
+    const variantId = (variant as { id?: string })?.id;
+    if (variantId) {
+      upsertObservation.mutate({ id: variantId, data: update as Record<string, unknown> });
+    }
   }
 
   if (!loaded) return null;

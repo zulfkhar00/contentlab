@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { variantApi, videoApi } from "@/lib/api-client";
+import { useSubmitUrl, useCreateVideo, useUpdateBrief } from "@/lib/query-hooks";
 import {
   useExperiment,
   getVariant,
@@ -89,7 +90,7 @@ type ApprovalStage = "pending" | "approved" | "recorded" | "published";
 
 export default function RecordingBriefPage() {
   const params = useParams<{ role: string }>();
-  const { experiment, startTracking, updateVariantBrief } = useExperiment();
+  const { experiment } = useExperiment();
   const { context: projectContext } = useProjectContext();
   if (!experiment) return (
     <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -99,6 +100,9 @@ export default function RecordingBriefPage() {
   const variant = getVariant(experiment, params.role);
   const nextVariant = getNextActionVariant(experiment.variants);
 
+  const submitUrl = useSubmitUrl();
+  const createVideo = useCreateVideo();
+  const updateBrief = useUpdateBrief();
   const [urlDraft, setUrlDraft] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -164,15 +168,20 @@ export default function RecordingBriefPage() {
   function confirmPublish(role: VariantRole) {
     const vid = experiment!.variants.find(v => v.role === role);
     if (vid) {
-      variantApi.createVideo((vid as {id?: string}).id ?? "")
-        .then(video => videoApi.submitUrl(video.id, urlDraft.trim(), {
-          video_live: pubChecks.videoLive,
-          variable_delivered: pubChecks.variableDelivered,
-          controlled_preserved: pubChecks.controlledPreserved,
-        }))
-        .catch(() => {});
+      const variantId = (vid as { id?: string }).id ?? "";
+      createVideo.mutate(variantId, {
+        onSuccess: (video) =>
+          submitUrl.mutate({
+            id: video.id,
+            url: urlDraft.trim(),
+            checks: {
+              video_live: pubChecks.videoLive,
+              variable_delivered: pubChecks.variableDelivered,
+              controlled_preserved: pubChecks.controlledPreserved,
+            },
+          }),
+      });
     }
-    startTracking(role, urlDraft.trim());
     setUrlDraft("");
     setShowPublishModal(false);
     setStage("published");
@@ -182,8 +191,9 @@ export default function RecordingBriefPage() {
     setRevision(craftBriefRevision(variant!, instruction));
   }
   function applyRevision() {
-    if (!revision) return;
-    updateVariantBrief(variant!.role, revision);
+    if (!revision || !variant) return;
+    const variantId = (variant as { id?: string }).id ?? "";
+    updateBrief.mutate({ id: variantId, data: revision });
     setRevision(null);
     setInstruction("");
   }

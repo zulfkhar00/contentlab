@@ -125,10 +125,11 @@ async def approve_and_generate(
         exp = await svc.approve_and_generate_experiment(
             scope=scope,
             hypothesis_id=hypothesis_id,
-            design_fields=body.model_dump(exclude_none=True),
+            design_fields={k: v for k, v in body.model_dump(exclude_none=True).items() if k != "tracking_window_hours"},
             project=project,
             facts=facts,
             provider=_provider,
+            tracking_window_hours=body.tracking_window_hours,
         )
     except ProjectNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
