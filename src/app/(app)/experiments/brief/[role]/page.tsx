@@ -91,6 +91,11 @@ export default function RecordingBriefPage() {
   const params = useParams<{ role: string }>();
   const { experiment, startTracking, updateVariantBrief } = useExperiment();
   const { context: projectContext } = useProjectContext();
+  if (!experiment) return (
+    <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+      No active experiment. Approve a hypothesis first.
+    </div>
+  );
   const variant = getVariant(experiment, params.role);
   const nextVariant = getNextActionVariant(experiment.variants);
 
@@ -157,7 +162,7 @@ export default function RecordingBriefPage() {
   }
 
   function confirmPublish(role: VariantRole) {
-    const vid = experiment.variants.find(v => v.role === role);
+    const vid = experiment!.variants.find(v => v.role === role);
     if (vid) {
       variantApi.createVideo((vid as {id?: string}).id ?? "")
         .then(video => videoApi.submitUrl(video.id, urlDraft.trim(), {

@@ -136,6 +136,33 @@ export default function OverviewPage() {
   const { hypotheses, loaded: hypothesesLoaded } = useHypotheses();
 
   if (!experimentLoaded || !hypothesesLoaded) return null;
+  if (!experiment) {
+    const noExpKpis = [
+      { label: "Published Videos", value: "0" },
+      { label: "Product Clicks", value: "0" },
+      { label: "Completed Experiments", value: "0" },
+      { label: "Active Research Thread", value: "0" },
+    ];
+    return (
+      <>
+        <div className="mb-2 flex flex-col gap-2">
+          <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">What am I currently learning, and what should I do next?</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {noExpKpis.map((k) => (
+            <div key={k.label} className="flex flex-col justify-between border border-border bg-card p-4">
+              <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">{k.label}</span>
+              <span className="font-mono text-2xl font-semibold">{k.value}</span>
+            </div>
+          ))}
+        </div>
+        <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          No active experiment yet. Approve a hypothesis to get started.
+        </div>
+      </>
+    );
+  }
 
   const publishedVideos = getPublishedCount(experiment.variants);
   const completedExperiments = SEED_INSIGHTS.length;

@@ -133,11 +133,16 @@ export default function ExperimentWorkspacePage() {
   }, [loaded]);
 
   const linked = useMemo(
-    () => (hypothesesLoaded ? findLinkedHypothesis(experiment, hypotheses) : null),
+    () => (hypothesesLoaded ? findLinkedHypothesis(experiment!, hypotheses) : null),
     [experiment, hypotheses, hypothesesLoaded],
   );
 
   if (!loaded || !hypothesesLoaded) return null;
+  if (!experiment) return (
+    <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+      No active experiment. Approve a hypothesis to generate one.
+    </div>
+  );
 
   const status = getExperimentStatus(experiment.variants);
   const published = getPublishedCount(experiment.variants);

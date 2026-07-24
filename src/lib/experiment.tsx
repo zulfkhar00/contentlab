@@ -228,21 +228,19 @@ export function getTrackingWindow(
 const STORAGE_KEY = "cl_experiment";
 const LEGACY_STORAGE_KEY = "cl_campaign";
 
-function load(): ExperimentData {
-  if (typeof window === "undefined") return createDefaultExperiment();
+function load(): ExperimentData | null {
+  if (typeof window === "undefined") return null;
   try {
-    // One-shot migration from the old key. Runs on first mount after the
-    // rename; subsequent loads read from cl_experiment directly.
     const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacy && !window.localStorage.getItem(STORAGE_KEY)) {
       window.localStorage.setItem(STORAGE_KEY, legacy);
       window.localStorage.removeItem(LEGACY_STORAGE_KEY);
     }
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return createDefaultExperiment();
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
-    return createDefaultExperiment();
+    return null;
   }
 }
 
@@ -270,7 +268,7 @@ export function emptyObservation(): VariantObservation {
 }
 
 type ExperimentContextValue = {
-  experiment: ExperimentData;
+  experiment: ExperimentData | null;
   loaded: boolean;
   startTracking: (role: VariantRole, url: string) => void;
   updateVariantBrief: (role: VariantRole, edit: VariantBriefEdit) => void;
@@ -284,16 +282,18 @@ const Ctx = createContext<ExperimentContextValue | null>(null);
 // Experiments showing one consistent, live experiment instead of each
 // holding its own stale copy.
 export function ExperimentProvider({ children }: { children: ReactNode }) {
-  const [experiment, setExperimentState] = useState<ExperimentData>(createDefaultExperiment);
+  const [experiment, setExperimentState] = useState<ExperimentData | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setExperimentState(load());
+    const stored = load();
+    setExperimentState(stored);
     setLoaded(true);
   }, []);
 
   function startTracking(role: VariantRole, url: string) {
     setExperimentState((prev) => {
+      if (!prev) return prev;
       const idx = prev.variants.findIndex((v) => v.role === role);
       if (idx === -1) return prev;
       const variants = prev.variants.map((v, i) => {
@@ -320,6 +320,7 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
 
   function updateVariantBrief(role: VariantRole, edit: VariantBriefEdit) {
     setExperimentState((prev) => {
+      if (!prev) return prev;
       const variants = prev.variants.map((v) =>
         v.role === role ? { ...v, ...edit } : v,
       ) as [Variant, Variant, Variant];
@@ -331,6 +332,7 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
 
   function updateVariantObservation(role: VariantRole, obs: Partial<VariantObservation>) {
     setExperimentState((prev) => {
+      if (!prev) return prev;
       const variants = prev.variants.map((v) =>
         v.role === role
           ? { ...v, observation: { ...(v.observation ?? emptyObservation()), ...obs } }

@@ -34,7 +34,7 @@ export default function VideosPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("All");
 
-  const videos = experiment.variants.filter(
+  const videos = experiment!.variants.filter(
     (v) => v.status === "tracking" || v.status === "completed",
   );
 
@@ -48,7 +48,7 @@ export default function VideosPage() {
   const [selectedRole, setSelectedRole] = useState<VariantRole | null>(
     videos[0]?.role ?? null,
   );
-  const selected = experiment.variants.find((v) => v.role === selectedRole) ?? null;
+  const selected = experiment!.variants.find((v) => v.role === selectedRole) ?? null;
 
   function copyUrl(url: string) {
     navigator.clipboard?.writeText(url);
@@ -63,13 +63,18 @@ export default function VideosPage() {
   // hydration mismatch. Gating on `loaded` moves the whole tracking-window
   // computation past hydration, where there's nothing to diff against.
   if (!loaded) return null;
+  if (!experiment) return (
+    <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+      No published videos yet. Complete the recording workflow to see tracking here.
+    </div>
+  );
 
-  const publishedCount = getPublishedCount(experiment.variants);
-  const trackingCount = experiment.variants.filter((v) => v.status === "tracking").length;
-  const totalViews = experiment.variants.reduce((s, v) => s + (v.metrics?.views ?? 0), 0);
-  const totalClicksForAvg = experiment.variants.reduce((s, v) => s + (v.metrics?.clicks ?? 0), 0);
+  const publishedCount = getPublishedCount(experiment!.variants);
+  const trackingCount = experiment!.variants.filter((v) => v.status === "tracking").length;
+  const totalViews = experiment!.variants.reduce((s, v) => s + (v.metrics?.views ?? 0), 0);
+  const totalClicksForAvg = experiment!.variants.reduce((s, v) => s + (v.metrics?.clicks ?? 0), 0);
   const avgClicksPer1k = totalViews > 0 ? clicksPer1k(totalViews, totalClicksForAvg) : 0;
-  const expStatus = getExperimentStatus(experiment.variants);
+  const expStatus = getExperimentStatus(experiment!.variants);
 
   const liveKpis = [
     { label: "Published Videos", value: String(publishedCount) },
@@ -168,7 +173,7 @@ export default function VideosPage() {
                       {v.title}
                     </td>
                     <td className="max-w-[150px] truncate p-3 text-xs text-muted-foreground">
-                      {experiment.name}
+                      {experiment!.name}
                     </td>
                     <td className="p-3">
                       <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground">
@@ -223,8 +228,8 @@ export default function VideosPage() {
             <VideoInspector
               key={selected.role}
               variant={selected}
-              experimentName={experiment.name}
-              trackingWindowHours={experiment.trackingWindowHours}
+              experimentName={experiment!.name}
+              trackingWindowHours={experiment!.trackingWindowHours}
               onCopyUrl={copyUrl}
             />
           ) : (

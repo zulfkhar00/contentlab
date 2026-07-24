@@ -203,7 +203,7 @@ class DevFixtureService:
                     "viid": video_ids[pos],
                     "sms": start_snap_ids[pos],
                     "ems": end_snap_ids[pos],
-                    "vd": metrics["views"],
+                    "vd": metrics["views"] - 0,  # end_snapshot.views - start_snapshot.views (start = 0)
                     "ld": metrics["likes"],
                     "cd": metrics["comments"],
                     "uc": metrics["unique_clicks"],

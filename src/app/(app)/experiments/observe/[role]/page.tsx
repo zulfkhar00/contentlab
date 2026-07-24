@@ -35,6 +35,11 @@ export default function ObservePage() {
   const params = useParams();
   const role = (typeof params?.role === "string" ? params.role : "").toUpperCase() as VariantRole;
   const { experiment, loaded, updateVariantObservation } = useExperiment();
+  if (!experiment) return (
+    <div className="border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
+      No active experiment.
+    </div>
+  );
   const variant = loaded ? getVariant(experiment, role) : null;
   const [obs, setObs] = useState<VariantObservation>(emptyObservation);
 
