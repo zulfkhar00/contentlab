@@ -45,7 +45,7 @@ BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}"
 WINDOW_HOURS = 2 / 60           # 2 minutes as a fraction of an hour
 POLL_INTERVAL = 3               # seconds between DB polls
 MAX_POLL = 420                  # max seconds to wait for any single step
-VENV = "/tmp/cl_venv/bin/python"
+VENV = sys.executable
 logging.basicConfig(level=logging.WARNING)
 
 
