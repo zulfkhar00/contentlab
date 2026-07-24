@@ -1,4 +1,4 @@
-.PHONY: help check-docker check-uv env build up down restart logs ps shell test-unit e2e clean reset-db
+.PHONY: help setup check-docker check-uv env build up down restart logs ps shell test-unit e2e clean reset-db
 
 ## help        Print available targets (default)
 help:
@@ -9,8 +9,8 @@ help:
 
 ## check-docker  Verify docker is installed and running
 check-docker:
-	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is not installed. Install Docker Desktop and try again."; exit 1; }
-	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not running. Start Docker Desktop and try again."; exit 1; }
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is not installed. Run: make setup"; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not running. Open OrbStack or run: make setup"; exit 1; }
 
 ## check-uv    Verify uv is installed
 check-uv:
@@ -19,6 +19,15 @@ check-uv:
 		echo "Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"; \
 		exit 1; \
 	}
+
+## setup       Install OrbStack and uv via brew
+setup:
+	@command -v brew >/dev/null 2>&1 || { echo "Install brew first"; exit 1; }
+	@echo "Installing OrbStack (lightweight Docker)..."
+	@brew install orbstack 2>/dev/null || true
+	@echo "Installing uv..."
+	@brew install uv 2>/dev/null || true
+	@echo "Done. Run: make env && make up"
 
 ## env         Copy .env.example to .env if .env does not exist
 env:
