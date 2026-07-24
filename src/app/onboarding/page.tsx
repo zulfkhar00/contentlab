@@ -118,15 +118,41 @@ export default function OnboardingPage() {
     }
   })();
 
-  const finish = () => {
-    // TODO(auth): also persist onboarding_completed_at against the
-    // authenticated user's project record once the backend exists. The
-    // context itself already persists via saveProjectContext below.
-    saveProjectContext({
-      ...form,
-      trackingSlug,
-      destinationUrl: form.productUrl,
-    });
+  const finish = async () => {
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_name: form.productName,
+          product_type: form.productType,
+          product_description: form.productDescription,
+          product_url: form.productUrl,
+          target_audience: form.targetAudience,
+          problem_solved: form.problemSolved,
+          why_it_matters: form.whyItMatters,
+          current_alternatives: form.currentAlternatives,
+          desired_action: form.desiredAction,
+          primary_cta: form.primaryCta,
+          tiktok_handle: form.tiktokHandle,
+          account_public: form.accountPublic,
+          manual_publish: form.manualPublish,
+          onboarded: true,
+        }),
+      });
+      if (res.ok) {
+        const project = await res.json();
+        saveProjectContext({
+          ...form,
+          trackingSlug: project.tracking_slug,
+          destinationUrl: project.destination_url,
+        });
+      } else if (res.status !== 409) {
+        saveProjectContext({ ...form, trackingSlug, destinationUrl: form.productUrl });
+      }
+    } catch (err) {
+      saveProjectContext({ ...form, trackingSlug, destinationUrl: form.productUrl });
+    }
     document.cookie = "cl_onboarded=1; path=/; max-age=31536000; samesite=lax";
     router.push("/overview");
   };
