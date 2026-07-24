@@ -228,10 +228,7 @@ CREATE TRIGGER hypotheses_updated_at
 -- Helper: JSONB object with schemaVersion check
 CREATE OR REPLACE FUNCTION is_versioned_jsonb(j jsonb) RETURNS boolean
 LANGUAGE sql IMMUTABLE STRICT AS $$
-  SELECT
-    jsonb_typeof(j) = 'object'
-    AND j ? 'schemaVersion'
-    AND j->>'schemaVersion' = '1';
+  SELECT jsonb_typeof(j) = 'object' AND (j ? 'schemaVersion');
 $$;
 
 CREATE TABLE experiments (
@@ -626,7 +623,7 @@ RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
 DECLARE
   v_snap_id   uuid;
   v_snap_ids  uuid[];
-  v_status    text;
+  v_status    snapshot_status;
 BEGIN
   -- Build list of snapshot IDs to check
   IF TG_OP = 'INSERT' THEN
@@ -843,7 +840,7 @@ ALTER TABLE insights                      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follow_up_candidates          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_runs                       ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY projects_select          ON projects               FOR SELECT USING (user_id = auth.uid() AND deleted_at IS NULL);
+CREATE POLICY projects_select          ON projects               FOR SELECT USING (user_id = auth.uid());
 CREATE POLICY project_facts_select     ON project_facts          FOR SELECT USING (owns_project(project_id));
 CREATE POLICY hypotheses_select        ON hypotheses             FOR SELECT USING (owns_project(project_id));
 CREATE POLICY experiments_select       ON experiments            FOR SELECT USING (owns_project(project_id));
