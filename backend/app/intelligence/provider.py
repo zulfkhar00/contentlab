@@ -1,7 +1,5 @@
 """
-IntelligenceProvider protocol.
-Every implementation returns (result, input_payload, input_hash) tuples so
-the service layer can store a single canonical ai_run per invocation.
+IntelligenceProvider protocol — extended for Sprint 4.
 """
 from typing import Protocol, runtime_checkable
 
@@ -14,11 +12,7 @@ class IntelligenceProvider(Protocol):
         facts: list[dict],
         context_version: int,
     ) -> tuple[list[dict], dict, str]:
-        """
-        Returns (hypotheses, input_payload, input_hash).
-        input_payload is the canonical dict sent to the model.
-        input_hash is sha256 of json.dumps(input_payload, sort_keys=True).
-        """
+        """Returns (hypotheses, input_payload, input_hash)."""
         ...
 
     async def design_experiment(
@@ -27,9 +21,44 @@ class IntelligenceProvider(Protocol):
         project: dict,
         facts: list[dict],
     ) -> tuple[dict, dict, str]:
+        """Returns (experiment_design, input_payload, input_hash)."""
+        ...
+
+    async def analyze_experiment(
+        self,
+        evidence: dict,
+        hypothesis_snapshot: dict,
+        project: dict,
+        facts: list[dict],
+    ) -> tuple[dict, dict, str]:
         """
-        Returns (experiment_design, input_payload, input_hash).
-        hypothesis must be the fully merged design (stored fields + request edits)
-        so the hash reflects what was actually sent to the model.
+        Interprets bounded evidence. Code has already computed all metrics.
+        evidence contains pre-computed comparisons; provider only supplies prose.
+
+        Returns (insight_payload, input_payload, input_hash).
+        insight_payload must contain:
+            supported_learning, evidence_basis (versioned JSONB),
+            do_not_infer_yet, recommended_next_test, limitations,
+            outcome_type, outcome_description
+        """
+        ...
+
+    async def generate_follow_up_candidates(
+        self,
+        insight: dict,
+        hypothesis_snapshot: dict,
+        project: dict,
+        facts: list[dict],
+    ) -> tuple[list[dict], dict, str]:
+        """
+        Generate exactly 3 follow-up candidates: one per slot.
+        Slots: safest_next_step, highest_learning, highest_upside.
+        Exactly one candidate must have recommended=True.
+
+        Returns (candidates, input_payload, input_hash).
+        Each candidate must contain:
+            slot, relationship_type, statement, why_this_follows,
+            recommended, recommendation_reason,
+            previous_learning, remaining_unknown
         """
         ...

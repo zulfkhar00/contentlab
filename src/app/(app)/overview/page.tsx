@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import Link from "next/link";
 import {
   ArrowRight,
@@ -27,6 +29,7 @@ import {
   insightClicksPer1k,
   type Insight,
 } from "@/lib/insights";
+import { insightApi } from "@/lib/api-client";
 
 function MonoLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -147,7 +150,33 @@ export default function OverviewPage() {
     0,
   ) || totalProductClicks();
   const activeThreads = hypotheses.filter((h) => h.status === "testing").length || 1;
-  const latestInsight = pickLatestInsight();
+  const [apiLatestInsight, setApiLatestInsight] = useState<ReturnType<typeof pickLatestInsight>>(null);
+  const latestInsight = apiLatestInsight ?? pickLatestInsight();
+
+  useEffect(() => {
+    insightApi.list().then((items) => {
+      if (items.length > 0) {
+        const latest = items[0];
+        setApiLatestInsight({
+          id: latest.id,
+          experimentName: latest.hypothesis_text?.slice(0, 50) ?? "Experiment",
+          hypothesis: latest.hypothesis_text ?? "",
+          primaryMetric: latest.primary_metric ?? "Clicks / 1K Views",
+          completedAt: latest.generated_at,
+          windowHours: 72,
+          control: { role: "A", title: "Control", roleLabel: "Control", views: 0, clicks: 0 },
+          treatment: { role: "B", title: "Treatment", roleLabel: "Hypothesis Treatment", views: 0, clicks: 0 },
+          lift: 0,
+          evidenceBasis: latest.supported_learning ?? "",
+          supportedLearning: latest.supported_learning ?? "",
+          doNotInferYet: [],
+          recommendedNextTest: "",
+          followUp: { title: "", statement: "", category: "", primaryMetric: "", rationale: "", relationshipType: "replication", previousLearning: "", remainingUnknown: "" },
+          sourceHypothesisId: "",
+        } as ReturnType<typeof pickLatestInsight>);
+      }
+    }).catch(() => {});
+  }, [experimentLoaded]);
   const nextAction = computeNextAction(experiment, latestInsight);
   const currentQuestion = findCurrentResearchQuestion(experiment, hypotheses);
 

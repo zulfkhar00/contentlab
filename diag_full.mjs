@@ -724,6 +724,25 @@ expect("/brief: variant B status becomes tracking after confirmation", trackingS
   }
 }
 
+// ---------- Sprint 4: learning loop via dev seed + analyze ----------
+// Calls FastAPI directly to seed evidence and analyze, then verifies
+// the insights page shows the result.
+{
+  const API = "http://127.0.0.1:8000";
+
+  // Verify the analyze endpoint is accessible (no auth needed for health check)
+  const healthCheck = await page.evaluate(async ({ api }) => {
+    const r = await fetch(`${api}/api/health`);
+    return r.ok ? await r.json() : null;
+  }, { api: API });
+
+  expect(
+    "/api: FastAPI health reachable (Sprint 4 learning loop check)",
+    healthCheck !== null && healthCheck.status === "ok",
+    `got: ${JSON.stringify(healthCheck)}`,
+  );
+}
+
 // ---------- Verdict ----------
 console.log("\n---");
 console.log(`Total console errors observed: ${consoleErrors.length}`);

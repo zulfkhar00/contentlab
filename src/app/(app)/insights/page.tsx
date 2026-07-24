@@ -28,6 +28,8 @@ import {
   type ComparedVariant,
   type NextCandidate,
 } from "@/lib/insights";
+import { insightApi, type InsightSummary } from "@/lib/api-client";
+import { useEffect, useState as useApiState } from "react";
 import { useHypotheses } from "@/lib/hypotheses";
 
 function MonoLabel({ children }: { children: React.ReactNode }) {
@@ -314,13 +316,22 @@ function InsightDetail({ insight }: { insight: Insight }) {
 function InsightsPageInner() {
   const searchParams = useSearchParams();
   const idParam = searchParams.get("id");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    idParam ?? SEED_INSIGHTS[0]?.id ?? null,
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(idParam ?? null);
   const { loaded } = useHypotheses();
+  const [apiInsights, setApiInsights] = useApiState<InsightSummary[]>([]);
+
+  useEffect(() => {
+    insightApi.list().then((items) => {
+      setApiInsights(items);
+      if (!selectedId && items.length > 0) setSelectedId(items[0].id);
+    }).catch(() => {
+      if (!selectedId) setSelectedId(SEED_INSIGHTS[0]?.id ?? null);
+    });
+  }, []);
 
   if (!loaded) return null;
 
+  const insights = apiInsights.length > 0 ? apiInsights : SEED_INSIGHTS.map(s => ({...s, generated_at: s.completedAt}));
   const selected = SEED_INSIGHTS.find((i) => i.id === selectedId) ?? null;
 
   return (
@@ -332,7 +343,7 @@ function InsightsPageInner() {
         </p>
       </div>
 
-      {SEED_INSIGHTS.length === 0 ? (
+      {insights.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 border border-dashed border-border bg-card px-6 py-20 text-center">
           <Lightbulb className="size-7 text-muted-foreground" />
           <h3 className="text-lg font-semibold tracking-tight">No insights yet</h3>
@@ -348,7 +359,7 @@ function InsightsPageInner() {
               <h3 className="text-sm font-semibold tracking-tight">Insight Library</h3>
             </div>
             <div className="flex flex-col gap-3 p-3">
-              {SEED_INSIGHTS.map((insight) => {
+              {insights.map((insight) => {
                 const isSelected = insight.id === selectedId;
                 return (
                   <button
@@ -359,16 +370,16 @@ function InsightsPageInner() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold">{insight.experimentName}</span>
+                      <span className="text-sm font-semibold">{(insight as Record<string, unknown>)["experimentName"] as string ?? (insight as Record<string, unknown>)["hypothesis_text"] as string ?? "Insight"}</span>
                       <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground">
-                        {insight.lift}x
+                        {(insight as {outcome_type?: string}).outcome_type ?? "result"}
                       </span>
                     </div>
                     <p className="line-clamp-2 text-xs text-muted-foreground">
-                      {insight.hypothesis}
+                      {(insight as {hypothesis?: string}).hypothesis ?? (insight as {supported_learning?: string}).supported_learning ?? ""}
                     </p>
                     <span className="font-mono text-[10px] uppercase text-muted-foreground">
-                      {formatTimestamp(insight.completedAt)}
+                      {formatTimestamp((insight as {completedAt?: string}).completedAt ?? (insight as {generated_at?: string}).generated_at ?? "")}
                     </span>
                   </button>
                 );

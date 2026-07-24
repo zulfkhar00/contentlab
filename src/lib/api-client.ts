@@ -164,3 +164,62 @@ export const experimentApi = {
 };
 
 export { ContentLabApiError };
+// ── Insight API ───────────────────────────────────────────────────────────────
+
+export type EvidenceItem = {
+  variant_id: string;
+  position: string;
+  treatment_role: string;
+  title: string;
+  views_delta: number;
+  likes_delta: number;
+  comments_delta: number;
+  attributed_unique_clicks: number;
+  unique_clicks_per_1k: number;
+};
+
+export type Candidate = {
+  id: string;
+  insight_id: string;
+  slot: string;
+  relationship_type: string;
+  statement: string;
+  why_this_follows: string | null;
+  recommended: boolean;
+  recommendation_reason: string | null;
+  previous_learning: string | null;
+  remaining_unknown: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type InsightSummary = {
+  id: string;
+  experiment_id: string;
+  outcome_type: string | null;
+  outcome_description: string | null;
+  supported_learning: string | null;
+  research_question: string | null;
+  hypothesis_text: string | null;
+  primary_metric: string | null;
+  generated_at: string;
+};
+
+export type InsightDetail = InsightSummary & {
+  evidence_snapshot_id: string;
+  evidence_basis: Record<string, unknown>;
+  do_not_infer_yet: string[];
+  recommended_next_test: string | null;
+  limitations: string[];
+  candidates: Candidate[];
+  evidence_items: EvidenceItem[];
+};
+
+export const insightApi = {
+  list: () => apiFetch<InsightSummary[]>("/api/insights"),
+  get: (id: string) => apiFetch<InsightDetail>(`/api/insights/${id}`),
+  acceptCandidate: (id: string) =>
+    apiFetch<Hypothesis>(`/api/follow-up-candidates/${id}/accept`, { method: "POST" }),
+  dismissCandidate: (id: string) =>
+    apiFetch<Candidate>(`/api/follow-up-candidates/${id}/dismiss`, { method: "POST" }),
+};
