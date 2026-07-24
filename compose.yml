@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:15-alpine
+    ports:
+      - \"54322:5432\"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: content-lab-app
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/postgres
+      SUPABASE_URL: http://backend:8000
+      SUPABASE_ANON_KEY: local-anon-key
+      ENVIRONMENT: development
+      TIKTOK_METRICS_PROVIDER: fake
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  worker:
+    image: content-lab-app
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/postgres
+      SUPABASE_URL: http://backend:8000
+      SUPABASE_ANON_KEY: local-anon-key
+      ENVIRONMENT: development
+      TIKTOK_METRICS_PROVIDER: fake
+      WORKER_ID: worker-1
+      WORKER_POLL_INTERVAL: "5"
+      WORKER_HEARTBEAT_INTERVAL: "30"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python -m app.workers
+volumes:
+  db_data:
