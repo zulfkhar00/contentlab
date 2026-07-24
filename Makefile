@@ -27,6 +27,10 @@ setup:
 	@brew install orbstack 2>/dev/null || true
 	@echo "Installing uv..."
 	@brew install uv 2>/dev/null || true
+	@echo "Opening OrbStack to activate the docker CLI..."
+	@open -a OrbStack 2>/dev/null || true
+	@echo "Waiting for docker daemon (up to 30s)..."
+	@for n in 1 2 3 4 5 6; do docker info >/dev/null 2>&1 && break; sleep 5; done
 	@echo "Done. Run: make env && make up"
 
 ## env         Copy .env.example to .env if .env does not exist
