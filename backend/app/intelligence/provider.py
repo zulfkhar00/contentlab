@@ -1,7 +1,7 @@
 """
 IntelligenceProvider protocol.
-Every implementation — Fake or Claude — must satisfy this interface.
-The service layer calls the provider outside any open database transaction.
+Every implementation returns (result, input_payload, input_hash) tuples so
+the service layer can store a single canonical ai_run per invocation.
 """
 from typing import Protocol, runtime_checkable
 
@@ -13,14 +13,11 @@ class IntelligenceProvider(Protocol):
         project: dict,
         facts: list[dict],
         context_version: int,
-    ) -> list[dict]:
+    ) -> tuple[list[dict], dict, str]:
         """
-        Returns a list of hypothesis payloads (dicts) for a given project context.
-        Each dict must contain at minimum:
-            title, statement, category, primary_metric, rationale,
-            research_question, independent_variable, control_condition,
-            treatment_condition, controlled_elements, contradiction_condition
-        All returned hypotheses start with status = 'generated'.
+        Returns (hypotheses, input_payload, input_hash).
+        input_payload is the canonical dict sent to the model.
+        input_hash is sha256 of json.dumps(input_payload, sort_keys=True).
         """
         ...
 
@@ -28,14 +25,11 @@ class IntelligenceProvider(Protocol):
         self,
         hypothesis: dict,
         project: dict,
-    ) -> dict:
+        facts: list[dict],
+    ) -> tuple[dict, dict, str]:
         """
-        Returns experiment design for an approved hypothesis.
-        Must contain:
-            experiment_name, shared_constraints (versioned JSONB),
-            variants: list of 3 dicts, each with:
-                position (A|B|C), treatment_role, title, variable_value,
-                hook, hook_delivery_note, context, on_screen_text,
-                script_sections (versioned JSONB), recording_guidance (versioned JSONB)
+        Returns (experiment_design, input_payload, input_hash).
+        hypothesis must be the fully merged design (stored fields + request edits)
+        so the hash reflects what was actually sent to the model.
         """
         ...

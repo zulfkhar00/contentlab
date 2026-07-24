@@ -228,4 +228,4 @@ async def test_ai_runs_recorded(client, user_with_project):
             {"pid": project_id}
         )
         count = result.scalar()
-    assert count == 5  # one per hypothesis
+    assert count == 1  # one per provider invocation, not per hypothesis

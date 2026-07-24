@@ -119,7 +119,7 @@ async def approve_and_generate(
     Approve the hypothesis design and create Experiment + 3 Variants in one transaction.
     Provider call happens before the transaction opens.
     """
-    project, _ = await _get_project_and_facts(scope, db)
+    project, facts = await _get_project_and_facts(scope, db)
     svc = HypothesisService(db)
     try:
         exp = await svc.approve_and_generate_experiment(
@@ -127,6 +127,7 @@ async def approve_and_generate(
             hypothesis_id=hypothesis_id,
             design_fields=body.model_dump(exclude_none=True),
             project=project,
+            facts=facts,
             provider=_provider,
         )
     except ProjectNotFound as exc:

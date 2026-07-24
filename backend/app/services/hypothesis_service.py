@@ -1,7 +1,15 @@
 """
 Hypothesis service — all operations require ProjectScope.
-Provider calls happen outside transactions.
-ai_runs inserts happen after commits.
+
+Corrections applied:
+  1. One ai_run per provider invocation (not one per hypothesis).
+  2. ai_run inserted in the same transaction as domain entities.
+     The append-only trigger blocks UPDATE/DELETE — INSERT is allowed in-txn.
+  3. Canonical input_hash computed from the full payload passed to the
+     provider. After locking the Hypothesis, the hash is rebuilt from the
+     locked state and compared; mismatch → DomainError (retry).
+  5. generate_initial raises 409 when hypotheses exist.
+     Generate More is explicitly deferred (not yet implemented).
 """
 import json
 from datetime import datetime, timezone
@@ -23,7 +31,7 @@ class HypothesisService:
         self._repo = HypothesisRepository(db)
         self._exp_repo = ExperimentRepository(db)
 
-    # ── Generate ────────────────────────────────────────────────────────
+    # ── Generate ────────────────────────────────────────────────────────────
 
     async def generate_initial(
         self,
@@ -34,21 +42,26 @@ class HypothesisService:
     ) -> list[dict]:
         """
         Generate initial hypotheses using the provider.
-        Raises DomainError if hypotheses already exist for this project.
-        Provider call is outside any transaction.
+        Raises DomainError if hypotheses already exist.
+
+        Transaction: context_version revalidation + hypothesis inserts
+                     + ONE ai_run insert — all in a single commit.
         """
         existing_count = await self._repo.count_by_project(scope)
         if existing_count > 0:
-            raise DomainError("Hypotheses already generated for this project.")
+            raise DomainError(
+                "Hypotheses already exist for this project. "
+                "Generate More is not yet implemented."
+            )
 
         context_version = project.get("context_version", 1)
 
         # Provider call — OUTSIDE transaction
-        hypotheses_data, input_hash = await provider.generate_initial_hypotheses(
+        hypotheses_data, input_payload, input_hash = await provider.generate_initial_hypotheses(
             project=project, facts=facts, context_version=context_version
         )
 
-        # Revalidate: ensure context_version hasn't changed since we read it
+        # Short transaction: revalidate context_version + insert all + ai_run
         current_cv = await self._get_current_context_version(scope)
         if current_cv != context_version:
             raise DomainError(
@@ -56,10 +69,8 @@ class HypothesisService:
                 "Retry generation."
             )
 
-        # Prepare items for batch insert
-        items = []
-        for h in hypotheses_data:
-            items.append({
+        items = [
+            {
                 "title": h["title"],
                 "statement": h["statement"],
                 "research_question": h.get("research_question", ""),
@@ -72,27 +83,33 @@ class HypothesisService:
                 "rationale": h.get("rationale", ""),
                 "category": h.get("category", ""),
                 "status": "generated",
-            })
+            }
+            for h in hypotheses_data
+        ]
 
         created = await self._repo.create_batch(scope, items)
+        hypothesis_ids = [str(h["id"]) for h in created]
 
-        # Insert ai_runs AFTER commit — append-only table
-        for h_row in created:
-            await self._insert_ai_run(
-                scope=scope,
-                entity_type="Hypothesis",
-                entity_id=h_row["id"],
-                operation="generateHypotheses",
-                model=provider.MODEL,
-                prompt_version=provider.PROMPT_VERSION,
-                input_hash=input_hash,
-                context_version=context_version,
-            )
+        # ONE ai_run for the entire invocation, in the same transaction
+        # output_payload records which hypothesis IDs were created
+        output_payload = json.dumps({"hypothesis_ids": hypothesis_ids})
+        await self._insert_ai_run(
+            scope=scope,
+            entity_type="Hypothesis",
+            entity_id=None,                       # batch: no single entity
+            operation="generateHypotheses",
+            model=provider.MODEL,
+            prompt_version=provider.PROMPT_VERSION,
+            input_hash=input_hash,
+            input_payload=json.dumps(input_payload),
+            output_payload=output_payload,
+            context_version=context_version,
+        )
         await self._db.commit()
 
         return created
 
-    # ── Read ────────────────────────────────────────────────────────────
+    # ── Read ────────────────────────────────────────────────────────────────
 
     async def list(
         self,
@@ -108,7 +125,7 @@ class HypothesisService:
             raise ProjectNotFound(f"Hypothesis {hypothesis_id} not found")
         return h
 
-    # ── Patch ───────────────────────────────────────────────────────────
+    # ── Patch ───────────────────────────────────────────────────────────────
 
     async def patch(self, scope: ProjectScope, hypothesis_id: UUID, data: dict) -> dict:
         h = await self._repo.get(scope, hypothesis_id)
@@ -116,16 +133,16 @@ class HypothesisService:
             raise ProjectNotFound(f"Hypothesis {hypothesis_id} not found")
         assert_can_patch(h["status"])
 
-        # Strip forbidden fields
         forbidden = {"id", "project_id", "status", "created_at", "approved_at", "tested_at"}
         fields = {k: v for k, v in data.items() if k not in forbidden and v is not None}
 
-        # primary_metric must be a valid enum value
-        valid_metrics = {"clicks_per_1k_views", "comments_per_1k_views", "views", "product_clicks", "comments"}
+        valid_metrics = {
+            "clicks_per_1k_views", "comments_per_1k_views",
+            "views", "product_clicks", "comments",
+        }
         if "primary_metric" in fields and fields["primary_metric"] not in valid_metrics:
             raise DomainError(f"Invalid primary_metric: {fields['primary_metric']}")
 
-        # Transition to draft on any edit
         if h["status"] == "generated":
             fields["status"] = "draft"
 
@@ -134,20 +151,19 @@ class HypothesisService:
             raise ProjectNotFound(f"Hypothesis {hypothesis_id} not found")
         return updated
 
-    # ── Reject ──────────────────────────────────────────────────────────
+    # ── Reject ──────────────────────────────────────────────────────────────
 
     async def reject(self, scope: ProjectScope, hypothesis_id: UUID) -> dict:
         h = await self._repo.get(scope, hypothesis_id)
         if not h:
             raise ProjectNotFound(f"Hypothesis {hypothesis_id} not found")
         assert_can_reject(h["status"])
-        updated = await self._repo.update(
+        return await self._repo.update(
             scope, hypothesis_id,
             {"status": "rejected", "rejected_at": datetime.now(timezone.utc)}
         )
-        return updated
 
-    # ── Approve & Generate Experiment ───────────────────────────────────
+    # ── Approve & Generate Experiment ────────────────────────────────────────
 
     async def approve_and_generate_experiment(
         self,
@@ -155,19 +171,23 @@ class HypothesisService:
         hypothesis_id: UUID,
         design_fields: dict,
         project: dict,
+        facts: list[dict],
         provider,
     ) -> dict:
         """
         1. Read hypothesis (outside txn).
-        2. Apply design_fields in memory.
-        3. Call provider.design_experiment (outside txn).
-        4. BEGIN short txn:
-              lock hypothesis FOR UPDATE
-              re-validate status
-              UPDATE hypothesis (design fields + approved)
-              INSERT experiment + 3 variants
-           COMMIT
-        5. INSERT ai_run (after commit).
+        2. Merge design_fields in memory → build canonical input_payload.
+        3. Compute pre-lock input_hash.
+        4. Call provider.design_experiment (outside txn).
+        5. BEGIN transaction:
+             a. Lock hypothesis FOR UPDATE.
+             b. Rebuild canonical input_payload from LOCKED state.
+             c. Recompute hash → compare with pre-lock hash.
+                Mismatch → DomainError (hypothesis was edited; client must retry).
+             d. UPDATE hypothesis (design fields + approved).
+             e. INSERT experiment + 3 variants.
+             f. INSERT ONE ai_run for the designExperiment invocation.
+           COMMIT.
         Returns the created experiment with variants.
         """
         h = await self._repo.get(scope, hypothesis_id)
@@ -175,15 +195,15 @@ class HypothesisService:
             raise ProjectNotFound(f"Hypothesis {hypothesis_id} not found")
         assert_can_approve(h["status"])
 
-        # Merge design fields with existing hypothesis for provider call
+        # Merge design edits for the provider call
         merged = {**h, **{k: v for k, v in design_fields.items() if v is not None}}
 
         # Provider call — OUTSIDE transaction
-        exp_design, input_hash = await provider.design_experiment(
-            hypothesis=merged, project=project
+        exp_design, input_payload, pre_lock_hash = await provider.design_experiment(
+            hypothesis=merged, project=project, facts=facts
         )
 
-        # Build hypothesis_design_snapshot
+        # Build snapshot
         snapshot = {
             "schemaVersion": 1,
             "researchQuestion": merged.get("research_question", ""),
@@ -196,23 +216,36 @@ class HypothesisService:
             "contradictionCondition": merged.get("contradiction_condition", ""),
         }
 
-        # Short transaction: lock → update hypothesis → create experiment + variants
+        # ── Short transaction ───────────────────────────────────────────────
         h_locked = await self._repo.get_for_update(scope, hypothesis_id)
         if not h_locked:
             raise ProjectNotFound(f"Hypothesis {hypothesis_id} not found")
         assert_can_approve(h_locked["status"])
 
-        # Apply design edits to hypothesis
+        # Correction 3: rebuild hash from LOCKED state + request edits
+        locked_merged = {**h_locked, **{k: v for k, v in design_fields.items() if v is not None}}
+        _, locked_payload, post_lock_hash = await provider.design_experiment(
+            hypothesis=locked_merged, project=project, facts=facts
+        )
+        if post_lock_hash != pre_lock_hash:
+            raise DomainError(
+                "Hypothesis was modified between generation and commit. "
+                "Reload and retry."
+            )
+
+        # Apply design edits
         h_fields = {k: v for k, v in design_fields.items() if v is not None}
         h_fields["status"] = "approved"
         h_fields["approved_at"] = datetime.now(timezone.utc)
         await self._db.execute(
-            text("UPDATE hypotheses SET " + ", ".join(f"{k} = :{k}" for k in h_fields) +
-                 " WHERE id = :hid AND project_id = :pid"),
-            {"hid": hypothesis_id, "pid": scope.project_id, **h_fields}
+            text(
+                "UPDATE hypotheses SET "
+                + ", ".join(f"{k} = :{k}" for k in h_fields)
+                + " WHERE id = :hid AND project_id = :pid"
+            ),
+            {"hid": hypothesis_id, "pid": scope.project_id, **h_fields},
         )
 
-        # Create experiment
         exp_data = {
             "name": exp_design["experiment_name"],
             "tracking_window_hours": 72,
@@ -221,11 +254,8 @@ class HypothesisService:
             "shared_constraints": json.dumps(exp_design["shared_constraints"]),
             "design_schema_version": 1,
         }
-
-        # Create variants (A = ready_to_review, B+C = queued)
         variants_data = []
         for vd in exp_design["variants"]:
-            v_status = "ready_to_review" if vd["position"] == "A" else "queued"
             variants_data.append({
                 "position": vd["position"],
                 "treatment_role": vd["treatment_role"],
@@ -237,15 +267,15 @@ class HypothesisService:
                 "on_screen_text": vd.get("on_screen_text", ""),
                 "script_sections": vd["script_sections"],
                 "recording_guidance": vd["recording_guidance"],
-                "status": v_status,
+                "status": "ready_to_review" if vd["position"] == "A" else "queued",
             })
 
         experiment = await self._exp_repo.create_with_variants(
             scope, hypothesis_id, exp_data, variants_data
         )
-        # create_with_variants commits the transaction
 
-        # ai_run for experiment design — AFTER commit
+        # ONE ai_run for the designExperiment invocation, in the same transaction
+        output_payload = json.dumps({"experiment_id": str(experiment["id"])})
         await self._insert_ai_run(
             scope=scope,
             entity_type="Hypothesis",
@@ -253,27 +283,40 @@ class HypothesisService:
             operation="designExperiment",
             model=provider.MODEL,
             prompt_version=provider.PROMPT_VERSION,
-            input_hash=input_hash,
+            input_hash=pre_lock_hash,
+            input_payload=json.dumps(input_payload),
+            output_payload=output_payload,
             context_version=project.get("context_version", 1),
         )
         await self._db.commit()
 
         return experiment
 
-    # ── Helpers ──────────────────────────────────────────────────────────
+    # ── Helpers ──────────────────────────────────────────────────────────────
 
     async def _get_current_context_version(self, scope: ProjectScope) -> int:
         result = await self._db.execute(
-            text("SELECT context_version FROM projects WHERE id = :pid AND deleted_at IS NULL"),
-            {"pid": scope.project_id}
+            text(
+                "SELECT context_version FROM projects "
+                "WHERE id = :pid AND deleted_at IS NULL"
+            ),
+            {"pid": scope.project_id},
         )
         row = result.first()
         return row[0] if row else 1
 
     async def _insert_ai_run(
-        self, scope: ProjectScope, entity_type: str, entity_id: UUID,
-        operation: str, model: str, prompt_version: str,
-        input_hash: str, context_version: int,
+        self,
+        scope: ProjectScope,
+        entity_type: str,
+        entity_id: UUID | None,
+        operation: str,
+        model: str,
+        prompt_version: str,
+        input_hash: str,
+        input_payload: str,
+        output_payload: str,
+        context_version: int,
     ) -> None:
         import json as _json
         zero_usage = _json.dumps({"inputTokens": 0, "outputTokens": 0})
@@ -284,7 +327,7 @@ class HypothesisService:
                 "context_version, input_hash, input_payload, output_payload, "
                 "validation_result, token_usage, cost_usd, latency_ms, status) "
                 "VALUES (:pid, :etype, :eid, :op, :model, :pv, "
-                ":cv, :ih, '{}', '{}', "
+                ":cv, :ih, :ip, :outp, "
                 "'valid', :tu, 0, 0, 'success')"
             ),
             {
@@ -296,6 +339,8 @@ class HypothesisService:
                 "pv": prompt_version,
                 "cv": context_version,
                 "ih": input_hash,
+                "ip": input_payload,
+                "outp": output_payload,
                 "tu": zero_usage,
-            }
+            },
         )
