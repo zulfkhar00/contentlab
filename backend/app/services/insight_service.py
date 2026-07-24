@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Insight service — analyze_experiment + candidate acceptance/dismissal.
 All operations require ProjectScope.

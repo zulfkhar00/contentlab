@@ -44,7 +44,7 @@ def register_handler(job_type: str):
 async def _claim(worker_id: str, job_types: list[str], lease_seconds: int) -> dict | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            text("SELECT * FROM claim_job(:wid, :types, :lease)"),
+            text("SELECT * FROM claim_job(:wid::text, :types::text[], :lease::integer)"),
             {"wid": worker_id, "types": job_types, "lease": lease_seconds},
         )
         row = result.mappings().first()
