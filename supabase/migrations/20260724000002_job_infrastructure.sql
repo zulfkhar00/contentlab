@@ -178,6 +178,10 @@ AS $$
 DECLARE
   v_row_count integer;   -- [P0.1] integer, not boolean
 BEGIN
+  IF p_retry_in IS NULL OR p_retry_in < interval '0 seconds' THEN
+    RAISE EXCEPTION 'p_retry_in must be a non-negative interval';
+  END IF;
+
   UPDATE public.jobs
   SET
     status           = CASE
@@ -189,12 +193,16 @@ BEGIN
                          WHEN attempt_count >= max_attempts THEN run_at
                          ELSE now() + p_retry_in
                        END,
+    completed_at     = CASE
+                         WHEN attempt_count >= max_attempts THEN now()
+                         ELSE NULL
+                       END,
     locked_at        = NULL,
     locked_by        = NULL,
     lease_expires_at = NULL,
     updated_at       = now()
   WHERE id        = p_job_id
-    AND locked_by = p_worker_id   -- [P0.3] only the owning worker
+    AND locked_by = p_worker_id
     AND status    = 'running';
 
   GET DIAGNOSTICS v_row_count = ROW_COUNT;  -- [P0.1] correct assignment
