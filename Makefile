@@ -49,6 +49,12 @@ build: check-docker env
 
 ## up          Start all services in the background
 up: check-docker env build
+	@echo "Applying migrations to local DB..."
+	@docker exec -i supabase_db_content-lab psql -U postgres < supabase/migrations/20260724000001_domain_schema.sql 2>/dev/null || true
+	@docker exec -i supabase_db_content-lab psql -U postgres < supabase/migrations/20260724000002_job_infrastructure.sql 2>/dev/null || true
+	@docker exec -i supabase_db_content-lab psql -U postgres < supabase/migrations/20260724000003_active_experiment_constraint.sql 2>/dev/null || true
+	@docker exec -i supabase_db_content-lab psql -U postgres < supabase/migrations/20260724000004_ai_runs_repair_tracking.sql 2>/dev/null || true
+	@docker exec -i supabase_db_content-lab psql -U postgres < supabase/migrations/20260724000005_float_tracking_window.sql 2>/dev/null || true
 	@docker compose up -d
 	@echo ''
 	@echo 'API: http://localhost:8000'
