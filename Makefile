@@ -1,4 +1,6 @@
 .PHONY: help setup check-docker check-uv env build up down restart logs ps shell test-unit e2e clean reset-db
+export PATH := /usr/local/bin:/opt/homebrew/bin:$(PATH)
+
 
 ## help        Print available targets (default)
 help:
@@ -7,10 +9,10 @@ help:
 	echo 'Targets:'
 	grep -E '^## ' Makefile | sed 's/## /  /'
 
-## check-docker  Verify docker is installed and running
+## check-docker  Verify docker daemon is reachable
 check-docker:
-	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is not installed. Run: make setup"; exit 1; }
-	@docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon is not running. Open OrbStack or run: make setup"; exit 1; }
+	@command -v docker >/dev/null 2>&1 || { echo "docker not found. Open a new terminal or run: make setup"; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "Docker daemon not running. Open OrbStack app."; exit 1; }
 
 ## check-uv    Verify uv is installed
 check-uv:
