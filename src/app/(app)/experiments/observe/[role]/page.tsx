@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { videoApi } from "@/lib/api-client";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Eye } from "lucide-react";

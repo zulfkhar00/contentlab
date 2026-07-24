@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { variantApi, videoApi } from "@/lib/api-client";
 import {
   useExperiment,
   getVariant,
@@ -156,6 +157,16 @@ export default function RecordingBriefPage() {
   }
 
   function confirmPublish(role: VariantRole) {
+    const vid = experiment.variants.find(v => v.role === role);
+    if (vid) {
+      variantApi.createVideo((vid as {id?: string}).id ?? "")
+        .then(video => videoApi.submitUrl(video.id, urlDraft.trim(), {
+          video_live: pubChecks.videoLive,
+          variable_delivered: pubChecks.variableDelivered,
+          controlled_preserved: pubChecks.controlledPreserved,
+        }))
+        .catch(() => {});
+    }
     startTracking(role, urlDraft.trim());
     setUrlDraft("");
     setShowPublishModal(false);

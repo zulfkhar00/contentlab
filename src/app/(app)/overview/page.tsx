@@ -110,17 +110,11 @@ function computeNextAction(
 }
 
 function pickLatestInsight(): Insight | null {
-  if (SEED_INSIGHTS.length === 0) return null;
-  return [...SEED_INSIGHTS].sort((a, b) =>
-    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
-  )[0];
+  return null; // replaced by API in component
 }
 
 function totalProductClicks(): number {
-  return SEED_INSIGHTS.reduce(
-    (sum, i) => sum + i.control.clicks + i.treatment.clicks,
-    0,
-  );
+  return 0; // will be computed from real variant metrics
 }
 
 function findCurrentResearchQuestion(

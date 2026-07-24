@@ -56,7 +56,15 @@ class InsightService:
         # Check for existing insight
         existing = await self._repo.get_current_for_experiment(scope, experiment_id)
         if existing:
-            raise DomainError("Insight already exists for this experiment.")
+            # Idempotent: return existing insight with its current evidence snapshot.
+            existing["candidates"] = await self._repo.get_candidates(scope, existing["id"])
+            snap = await self._repo.get_snapshot_for_experiment(scope, experiment_id)
+            if snap:
+                items = await self._repo.get_evidence_items(scope, snap["id"])
+                existing["evidence_items"] = _build_evidence_dict(items)["items"]
+            else:
+                existing["evidence_items"] = []
+            return existing
 
         # Load hypothesis snapshot + evidence
         hypothesis_snapshot = exp_row["hypothesis_design_snapshot"]
@@ -178,11 +186,19 @@ class InsightService:
                 },
             )
 
-        # Mark experiment completed
+        # Mark experiment completed + hypothesis tested — both in same transaction
         await self._db.execute(
             text(
                 "UPDATE experiments SET status = 'completed', completed_at = :now "
                 "WHERE id = :eid AND project_id = :pid"
+            ),
+            {"now": now, "eid": experiment_id, "pid": scope.project_id},
+        )
+        await self._db.execute(
+            text(
+                "UPDATE hypotheses SET status = 'tested', tested_at = :now "
+                "WHERE id = (SELECT hypothesis_id FROM experiments WHERE id = :eid AND project_id = :pid) "
+                "AND project_id = :pid"
             ),
             {"now": now, "eid": experiment_id, "pid": scope.project_id},
         )

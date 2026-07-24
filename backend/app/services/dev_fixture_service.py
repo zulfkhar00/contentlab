@@ -181,7 +181,10 @@ class DevFixtureService:
         for v in variants:
             pos = v["position"]
             metrics = _FIXTURE_METRICS[pos]
-            clicks_per_1k = round(metrics["unique_clicks"] / metrics["views"] * 1000, 2)
+            clicks_per_1k = (
+                round(metrics["unique_clicks"] / metrics["views"] * 1000, 2)
+                if metrics["views"] > 0 else None
+            )
             await self._db.execute(
                 text(
                     "INSERT INTO experiment_evidence_items "

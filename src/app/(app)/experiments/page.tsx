@@ -25,7 +25,7 @@ import {
   type VariantStatus,
 } from "@/lib/experiment";
 import { useHypotheses, type Hypothesis } from "@/lib/hypotheses";
-import { experimentApi, type Experiment as ApiExperiment } from "@/lib/api-client";
+import { experimentApi, variantApi, videoApi, type Experiment as ApiExperiment } from "@/lib/api-client";
 
 function StatusPill({
   children,
@@ -124,8 +124,12 @@ export default function ExperimentWorkspacePage() {
   const [copiedRole, setCopiedRole] = useState<VariantRole | null>(null);
   const [apiExperiment, setApiExperiment] = useState<ApiExperiment | null>(null);
 
-  useEffect(() => {
+  const refreshApiExperiment = () => {
     experimentApi.getActive().then(setApiExperiment).catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshApiExperiment();
   }, [loaded]);
 
   const linked = useMemo(

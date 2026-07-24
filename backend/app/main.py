@@ -5,6 +5,7 @@ from app.api.v1.projects import router as projects_router
 from app.api.v1.hypotheses import router as hypotheses_router
 from app.api.v1.experiments import router as experiments_router
 from app.api.v1.insights import router as insights_router
+from app.api.v1.variants import router as variants_router, video_router
 from app.api.v1.dev import router as dev_router
 from app.config import settings
 
@@ -27,6 +28,8 @@ app.include_router(projects_router)
 app.include_router(hypotheses_router)
 app.include_router(experiments_router)
 app.include_router(insights_router)
+app.include_router(variants_router)
+app.include_router(video_router)
 if settings.environment != "production":
     app.include_router(dev_router)
 

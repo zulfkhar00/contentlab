@@ -212,11 +212,7 @@ export default function ResearchLibraryPage() {
         setAll(mapped);
         if (mapped.length > 0) setSelectedId(mapped[0].id);
       })
-      .catch(() => {
-        // API unavailable — fall back to local seed
-        setAll(SEED_HYPOTHESES);
-        setSelectedId(SEED_HYPOTHESES[0].id);
-      })
+      .catch(() => {})
       .finally(() => setApiLoading(false));
   }
 

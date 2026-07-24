@@ -324,14 +324,12 @@ function InsightsPageInner() {
     insightApi.list().then((items) => {
       setApiInsights(items);
       if (!selectedId && items.length > 0) setSelectedId(items[0].id);
-    }).catch(() => {
-      if (!selectedId) setSelectedId(SEED_INSIGHTS[0]?.id ?? null);
-    });
+    }).catch(() => {});
   }, []);
 
   if (!loaded) return null;
 
-  const insights = apiInsights.length > 0 ? apiInsights : SEED_INSIGHTS.map(s => ({...s, generated_at: s.completedAt}));
+  const insights = apiInsights;
   const selected = SEED_INSIGHTS.find((i) => i.id === selectedId) ?? null;
 
   return (

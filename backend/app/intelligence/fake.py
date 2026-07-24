@@ -124,3 +124,27 @@ class FakeIntelligenceProvider:
         }
         evidence = {"items": insight.get("evidence_items", [])}
         return _fixture_candidates(evidence, hypothesis_snapshot), input_payload, _canonical_hash(input_payload)
+    async def revise_variant_brief(
+        self,
+        variant: dict,
+        instruction: str,
+        project: dict,
+        facts: list[dict],
+    ) -> tuple[dict, dict, str]:
+        base = variant.get("hook", "")
+        trimmed = instruction.strip() or "sharper framing"
+        revision = {
+            "hook": f"{base.rstrip('.')} — reframed around {trimmed}.",
+            "hook_delivery_note": f"Deliver with {trimmed}.",
+            "context": variant.get("context", ""),
+            "on_screen_text": variant.get("on_screen_text", ""),
+        }
+        input_payload = {
+            "operation": "reviseBrief",
+            "instruction": instruction,
+            "current_hook": base,
+            "product_name": project.get("product_name"),
+            "context_version": project.get("context_version", 1),
+        }
+        return revision, input_payload, _canonical_hash(input_payload)
+

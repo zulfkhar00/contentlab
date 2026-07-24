@@ -62,3 +62,17 @@ class IntelligenceProvider(Protocol):
             previous_learning, remaining_unknown
         """
         ...
+    async def revise_variant_brief(
+        self,
+        variant: dict,
+        instruction: str,
+        project: dict,
+        facts: list[dict],
+    ) -> tuple[dict, dict, str]:
+        """
+        Returns (revision, input_payload, input_hash).
+        revision contains proposed hook, hook_delivery_note, context, on_screen_text.
+        Not applied until the user explicitly calls PATCH /brief.
+        """
+        ...
+

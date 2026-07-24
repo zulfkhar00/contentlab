@@ -223,3 +223,80 @@ export const insightApi = {
   dismissCandidate: (id: string) =>
     apiFetch<Candidate>(`/api/follow-up-candidates/${id}/dismiss`, { method: "POST" }),
 };
+// ── Variant + Video API ───────────────────────────────────────────────────────
+
+export type VideoRecord = {
+  id: string;
+  variant_id: string;
+  attempt_number: number;
+  is_current: boolean;
+  status: string;
+  submitted_url: string | null;
+  normalized_tiktok_url: string | null;
+  tiktok_video_id: string | null;
+  validated_at: string | null;
+  tracking_started_at: string | null;
+  tracking_window_ends_at: string | null;
+  validation_error_code: string | null;
+  validation_error_detail: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExecutionObservation = {
+  id: string;
+  video_id: string;
+  delivered_variable: boolean | null;
+  used_approved_hook: boolean | null;
+  used_fixed_cta: boolean | null;
+  actual_duration_seconds: number | null;
+  actual_product_reveal_seconds: number | null;
+  format_changed: boolean | null;
+  audience_framing_changed: boolean | null;
+  offer_changed: boolean | null;
+  publishing_schedule_changed: boolean | null;
+  reason: string | null;
+  notes: string | null;
+  unexpected: string | null;
+  perceived_drop_off_at: string | null;
+  founder_observed_comment_sentiment: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ApiVariant = Variant & {
+  current_video: VideoRecord | null;
+  observation: ExecutionObservation | null;
+};
+
+export const variantApi = {
+  get: (id: string) => apiFetch<ApiVariant>(`/api/variants/${id}`),
+  updateBrief: (id: string, data: Partial<Pick<Variant, "hook" | "hook_delivery_note" | "context" | "on_screen_text">>) =>
+    apiFetch<ApiVariant>(`/api/variants/${id}/brief`, { method: "PATCH", body: JSON.stringify(data) }),
+  reviseBrief: (id: string, instruction: string) =>
+    apiFetch<{ proposed_revision: Partial<Variant>; variant_id: string }>(
+      `/api/variants/${id}/revise-brief`,
+      { method: "POST", body: JSON.stringify({ instruction }) }
+    ),
+  approveForRecording: (id: string) =>
+    apiFetch<ApiVariant>(`/api/variants/${id}/approve-for-recording`, { method: "POST" }),
+  confirmRecorded: (id: string) =>
+    apiFetch<ApiVariant>(`/api/variants/${id}/confirm-recorded`, { method: "POST" }),
+  createVideo: (id: string) =>
+    apiFetch<VideoRecord>(`/api/variants/${id}/videos`, { method: "POST" }),
+};
+
+export const videoApi = {
+  get: (id: string) => apiFetch<VideoRecord>(`/api/videos/${id}`),
+  submitUrl: (id: string, url: string, checks: { video_live: boolean; variable_delivered: boolean; controlled_preserved: boolean }) =>
+    apiFetch<VideoRecord>(`/api/videos/${id}/submit-url`, {
+      method: "POST",
+      body: JSON.stringify({ url, ...checks }),
+    }),
+  getObservation: (id: string) => apiFetch<ExecutionObservation | null>(`/api/videos/${id}/execution-observation`),
+  upsertObservation: (id: string, data: Partial<ExecutionObservation>) =>
+    apiFetch<ExecutionObservation>(`/api/videos/${id}/execution-observation`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+};
