@@ -26,6 +26,7 @@ import {
 } from "@/lib/experiment";
 import { useHypotheses, type Hypothesis } from "@/lib/hypotheses";
 import { experimentApi, variantApi, videoApi, type Experiment as ApiExperiment } from "@/lib/api-client";
+import { useActiveExperiment, getErrorMessage } from "@/lib/query-hooks";
 
 function StatusPill({
   children,

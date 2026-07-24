@@ -16,6 +16,7 @@ import {
 } from "@/lib/hypotheses";
 import { SEED_INSIGHTS, toHypothesis, insightClicksPer1k, type Insight } from "@/lib/insights";
 import { hypothesisApi } from "@/lib/api-client";
+import { useHypothesesQuery, useGenerateHypotheses, getErrorMessage } from "@/lib/query-hooks";
 import { apiToFrontend } from "@/lib/api-adapters";
 
 const FILTERS: Array<Status | "all"> = [

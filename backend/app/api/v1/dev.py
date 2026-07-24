@@ -138,3 +138,18 @@ async def complete_tracking_window(
 
     await db.commit()
     return {"video_id": str(video_id), "position": position, "message": msg}
+
+
+@router.post("/intelligence/canary")
+async def canary_call(
+    operation: str,
+    scope: ProjectScope = Depends(get_project_scope),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Sprint 6B: run one live Claude call for the specified operation.
+    Requires INTELLIGENCE_PROVIDER=claude and ANTHROPIC_API_KEY.
+    Returns latency, model, validation result without persisting ai_run.
+    """
+    from app.api.v1._canary import run_canary
+    return await run_canary(operation, scope, db)

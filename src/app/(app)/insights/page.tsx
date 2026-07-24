@@ -29,6 +29,7 @@ import {
   type NextCandidate,
 } from "@/lib/insights";
 import { insightApi, type InsightSummary } from "@/lib/api-client";
+import { useInsightsQuery, useAcceptCandidate, useDismissCandidate, getErrorMessage } from "@/lib/query-hooks";
 import { useEffect, useState as useApiState } from "react";
 import { useHypotheses } from "@/lib/hypotheses";
 

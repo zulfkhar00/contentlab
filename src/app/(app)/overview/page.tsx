@@ -30,6 +30,7 @@ import {
   type Insight,
 } from "@/lib/insights";
 import { insightApi } from "@/lib/api-client";
+import { useInsightsQuery } from "@/lib/query-hooks";
 
 function MonoLabel({ children }: { children: React.ReactNode }) {
   return (

@@ -277,6 +277,7 @@ type ExperimentContextValue = {
 
 const Ctx = createContext<ExperimentContextValue | null>(null);
 
+// ExperimentProvider is presentation-only state after Sprint 6B migration.
 // TODO(api): replace localStorage with real experiment/variant/scrape-job
 // endpoints once the backend exists. A single provider keeps Overview and
 // Experiments showing one consistent, live experiment instead of each

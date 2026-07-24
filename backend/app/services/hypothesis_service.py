@@ -309,7 +309,7 @@ class HypothesisService:
         self,
         scope: ProjectScope,
         entity_type: str,
-        entity_id: UUID | None,
+        entity_id,
         operation: str,
         model: str,
         prompt_version: str,
@@ -317,6 +317,12 @@ class HypothesisService:
         input_payload: str,
         output_payload: str,
         context_version: int,
+        request_group_id: str | None = None,
+        attempt_number: int = 1,
+        parent_ai_run_id=None,
+        error_detail: str | None = None,
+        status: str = "success",
+        validation_result: str = "valid",
     ) -> None:
         import json as _json
         zero_usage = _json.dumps({"inputTokens": 0, "outputTokens": 0})
@@ -341,6 +347,12 @@ class HypothesisService:
                 "ih": input_hash,
                 "ip": input_payload,
                 "outp": output_payload,
+                "vr": validation_result,
                 "tu": zero_usage,
+                "status": status,
+                "rg": request_group_id,
+                "att": attempt_number,
+                "par": str(parent_ai_run_id) if parent_ai_run_id else None,
+                "errd": error_detail,
             },
         )

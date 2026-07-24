@@ -175,9 +175,9 @@ class InsightService:
                     "INSERT INTO ai_runs "
                     "(project_id, entity_type, entity_id, operation, model, prompt_version, "
                     "context_version, input_hash, input_payload, output_payload, "
-                    "validation_result, token_usage, cost_usd, latency_ms, status) "
+                    "validation_result, token_usage, cost_usd, latency_ms, status, attempt_number) "
                     "VALUES (:pid, 'Insight', :eid, :op, :model, :pv, "
-                    ":cv, :ih, :ip, '{}', 'valid', :tu, 0, 0, 'success')"
+                    ":cv, :ih, :ip, '{}', 'valid', :tu, 0, 0, 'success', 1)"
                 ),
                 {
                     "pid": scope.project_id, "eid": insight_id, "op": op,

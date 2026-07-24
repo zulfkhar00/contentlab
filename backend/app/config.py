@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     intelligence_provider: str = "fake"  # "fake" | "claude"
 
     # Per-operation model IDs (override via env vars)
-    claude_model_generate_hypotheses: str = "claude-opus-4-5"
-    claude_model_design_experiment: str = "claude-opus-4-5"
-    claude_model_revise_brief: str = "claude-haiku-4-5"
-    claude_model_analyze_experiment: str = "claude-opus-4-5"
-    claude_model_generate_candidates: str = "claude-opus-4-5"
+    claude_model_generate_hypotheses: str = "claude-sonnet-5"
+    claude_model_design_experiment: str = "claude-sonnet-5"
+    claude_model_revise_brief: str = "claude-haiku-4-5-20251001"
+    claude_model_analyze_experiment: str = "claude-sonnet-5"
+    claude_model_generate_candidates: str = "claude-sonnet-5"
     claude_default_timeout: int = 60
     claude_max_tokens: int = 4096
 
