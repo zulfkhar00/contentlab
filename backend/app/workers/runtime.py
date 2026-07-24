@@ -21,7 +21,9 @@ import time
 import uuid
 from typing import Callable, Awaitable
 
-from sqlalchemy import text
+from sqlalchemy import text, bindparam
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.types import Text, Integer
 
 from app.config import settings
 from app.db.session import AsyncSessionLocal
@@ -44,7 +46,11 @@ def register_handler(job_type: str):
 async def _claim(worker_id: str, job_types: list[str], lease_seconds: int) -> dict | None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            text("SELECT * FROM claim_job(:wid::text, :types::text[], :lease::integer)"),
+            text("SELECT * FROM claim_job(:wid, :types, :lease)").bindparams(
+        bindparam("wid", type_=Text()),
+        bindparam("types", type_=ARRAY(Text())),
+        bindparam("lease", type_=Integer()),
+    ),
             {"wid": worker_id, "types": job_types, "lease": lease_seconds},
         )
         row = result.mappings().first()
