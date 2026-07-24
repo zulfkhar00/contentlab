@@ -7,7 +7,7 @@ from app.api.deps import get_project_scope
 from app.db.session import get_db
 from app.domain.errors import DomainError, ProjectNotFound
 from app.domain.scope import ProjectScope
-from app.intelligence.fake import FakeIntelligenceProvider
+from app.intelligence.factory import get_intelligence_provider
 from app.repositories.project_repo import ProjectRepository
 from app.schemas.hypothesis import (
     ApproveAndGenerateRequest,
@@ -19,7 +19,7 @@ from app.services.hypothesis_service import HypothesisService
 
 router = APIRouter(prefix="/api/hypotheses", tags=["hypotheses"])
 
-_provider = FakeIntelligenceProvider()
+_provider = get_intelligence_provider()
 
 
 async def _get_project_and_facts(scope: ProjectScope, db: AsyncSession) -> tuple[dict, list]:

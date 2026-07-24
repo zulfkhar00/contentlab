@@ -7,14 +7,14 @@ from app.api.deps import get_project_scope
 from app.db.session import get_db
 from app.domain.errors import DomainError, ProjectNotFound
 from app.domain.scope import ProjectScope
-from app.intelligence.fake import FakeIntelligenceProvider
+from app.intelligence.factory import get_intelligence_provider
 from app.schemas.hypothesis import HypothesisResponse
 from app.schemas.insight import CandidateResponse, InsightDetailResponse, InsightSummaryResponse
 from app.services.insight_service import InsightService
 
 router = APIRouter(tags=["insights"])
 
-_provider = FakeIntelligenceProvider()
+_provider = get_intelligence_provider()
 
 
 @router.post(

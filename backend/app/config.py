@@ -14,6 +14,19 @@ class Settings(BaseSettings):
     environment: str = "development"
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     tracking_base_url: str = "https://contentlab.app/p"
+    # Anthropic
+    anthropic_api_key: str = ""
+    intelligence_provider: str = "fake"  # "fake" | "claude"
+
+    # Per-operation model IDs (override via env vars)
+    claude_model_generate_hypotheses: str = "claude-opus-4-5"
+    claude_model_design_experiment: str = "claude-opus-4-5"
+    claude_model_revise_brief: str = "claude-haiku-4-5"
+    claude_model_analyze_experiment: str = "claude-opus-4-5"
+    claude_model_generate_candidates: str = "claude-opus-4-5"
+    claude_default_timeout: int = 60
+    claude_max_tokens: int = 4096
+
 
 
 settings = Settings()

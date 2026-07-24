@@ -7,7 +7,8 @@ from app.api.deps import get_project_scope
 from app.db.session import get_db
 from app.domain.errors import DomainError, ProjectNotFound
 from app.domain.scope import ProjectScope
-from app.intelligence.fake import FakeIntelligenceProvider
+from app.intelligence.factory import get_intelligence_provider
+from app.schemas.revision import ApplyRevisionRequest
 from app.schemas.variant import (
     BriefPatchRequest,
     ExecutionObservationRequest,
@@ -21,9 +22,53 @@ from app.services.variant_service import VariantService
 from app.repositories.video_repo import VideoRepository
 
 router = APIRouter(prefix="/api/variants", tags=["variants"])
+
+@router.post("/{variant_id}/apply-revision", response_model=VariantResponse)
+async def apply_revision(
+    variant_id: UUID,
+    body: ApplyRevisionRequest,
+    scope: ProjectScope = Depends(get_project_scope),
+    db: AsyncSession = Depends(get_db),
+) -> VariantResponse:
+    """
+    Apply a previously proposed brief revision using optimistic concurrency.
+    Returns 409 if the variant has been updated since the proposal was generated
+    (base_variant_updated_at no longer matches the current updated_at).
+    """
+    from app.domain.errors import DomainError
+    svc = VariantService(db)
+    try:
+        current = await svc.get(scope, variant_id)
+    except ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # Optimistic concurrency check
+    current_updated = current.get("updated_at")
+    if current_updated and current_updated != body.base_variant_updated_at:
+        raise HTTPException(
+            status_code=409,
+            detail="Variant was updated since this revision was proposed. Reload and regenerate.",
+        )
+
+    fields = {k: v for k, v in {
+        "hook": body.hook,
+        "hook_delivery_note": body.hook_delivery_note,
+        "context": body.context,
+        "on_screen_text": body.on_screen_text,
+    }.items() if v is not None}
+
+    try:
+        await svc.update_brief(scope, variant_id, fields)
+    except DomainError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    updated = await svc.get(scope, variant_id)
+    return VariantResponse.from_row(updated)
+
+
 video_router = APIRouter(prefix="/api/videos", tags=["videos"])
 
-_provider = FakeIntelligenceProvider()
+_provider = get_intelligence_provider()
 
 
 @router.get("/{variant_id}", response_model=VariantResponse)

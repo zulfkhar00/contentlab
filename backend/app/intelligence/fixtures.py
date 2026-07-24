@@ -153,18 +153,63 @@ def _fixture_experiment(hypothesis: dict, project: dict) -> dict:
 # ── Sprint 4: analyze_experiment fixture ─────────────────────────────────────
 
 def _fixture_insight(evidence: dict, hypothesis_snapshot: dict) -> dict:
-    """Deterministic insight interpretation of the canonical fixture evidence."""
-    winning = max(evidence["items"], key=lambda x: x["unique_clicks_per_1k"])
-    control = next((x for x in evidence["items"] if x["treatment_role"] == "control"), None)
+    """Deterministic insight interpretation adapted to evidence shape."""
+    items = evidence.get("items", [])
+
+    # Insufficient evidence: very low total views
+    total_views = sum(i.get("views_delta", 0) for i in items)
+    if total_views < 500:
+        return {
+            "outcome_type": "insufficient_evidence",
+            "outcome_description": "Total view count is too low to draw conclusions.",
+            "supported_learning": "Insufficient data was collected to support any learning.",
+            "do_not_infer_yet": ["Cannot draw conclusions from fewer than 500 total views."],
+            "recommended_next_test": "Re-run with larger tracking windows.",
+            "limitations": ["Very low view counts across all variants."],
+            "evidence_basis": {
+                "schemaVersion": 1, "trackingWindowsCompleted": len(items),
+                "requiredTrackingWindows": len(items), "attributionMethod": "isolated_window",
+                "executionDeviations": [], "allVideosValidated": True,
+            },
+        }
+
+    metrics = [float(i.get("unique_clicks_per_1k") or 0.0) for i in items]
+    spread = max(metrics) - min(metrics)
+
+    # Little difference: all variants within 2 clicks/1K of each other
+    if spread < 2.0:
+        return {
+            "outcome_type": "little_difference",
+            "outcome_description": "All variants performed similarly with no clear winner.",
+            "supported_learning": "The independent variable did not produce a meaningful difference in this experiment.",
+            "do_not_infer_yet": ["Cannot conclude the variable has no effect without a larger sample."],
+            "recommended_next_test": "Test a more extreme version of the variable.",
+            "limitations": ["Very small performance spread across variants."],
+            "evidence_basis": {
+                "schemaVersion": 1, "trackingWindowsCompleted": len(items),
+                "requiredTrackingWindows": len(items), "attributionMethod": "isolated_window",
+                "executionDeviations": [], "allVideosValidated": True,
+            },
+        }
+
+    # Standard directional case
+    deviations = [i for i in items if i.get("delivered_variable") is False]
+    outcome = "execution_problem" if deviations else "directional_difference"
+    winning = max(items, key=lambda x: float(x.get("unique_clicks_per_1k") or 0.0))
+    control = next((x for x in items if x.get("treatment_role") == "control"), None)
     independent_var = hypothesis_snapshot.get("independentVariable", "Opening angle")
     winning_var = winning.get("title", "Hypothesis Treatment")
-    control_metric = f'{control["unique_clicks_per_1k"]:.1f}' if control else "—"
-    winning_metric = f'{winning["unique_clicks_per_1k"]:.1f}'
+    control_metric = f'{float(control["unique_clicks_per_1k"]):.1f}' if control and control.get("unique_clicks_per_1k") else "—"
+    winning_metric = f'{float(winning["unique_clicks_per_1k"]):.1f}' if winning.get("unique_clicks_per_1k") else "—"
+
+    deviation_note = ""
+    if deviations:
+        deviation_note = f" Note: {len(deviations)} variant(s) did not deliver the variable as intended."
 
     return {
-        "outcome_type": "directional_difference",
+        "outcome_type": outcome,
         "outcome_description": (
-            f"The {winning_var} produced a clear directional difference vs the control. "
+            f"The {winning_var} produced a clear directional difference vs the control.{deviation_note} "
             "Replication or mechanism isolation is needed before treating this as a reusable rule."
         ),
         "supported_learning": (
@@ -173,23 +218,23 @@ def _fixture_insight(evidence: dict, hypothesis_snapshot: dict) -> dict:
             f"at {control_metric}. The result is directional and warrants a follow-up test."
         ),
         "do_not_infer_yet": [
-            "This compares one specific treatment against one control — it does not establish an ideal value for the variable.",
-            "Both videos ran on the same account and audience; the result has not been validated on a different audience.",
+            "This compares one specific execution — it does not establish an ideal value for the variable.",
+            "Both videos ran on the same account; the result has not been validated on a different audience.",
         ],
         "recommended_next_test": (
             f"Test a second {independent_var.lower()} variant with a meaningfully different "
             "specific angle to see whether the effect holds beyond this particular execution."
         ),
         "limitations": [
-            "Variants ran sequentially; audience composition may have shifted across 9 days.",
+            "Variants ran sequentially; audience composition may have shifted across the 9-day window.",
             "Only one execution of each treatment was tested — execution quality may have affected results.",
         ],
         "evidence_basis": {
             "schemaVersion": 1,
-            "trackingWindowsCompleted": len(evidence["items"]),
-            "requiredTrackingWindows": len(evidence["items"]),
+            "trackingWindowsCompleted": len(items),
+            "requiredTrackingWindows": len(items),
             "attributionMethod": "isolated_window",
-            "executionDeviations": [],
+            "executionDeviations": [i.get("position") for i in deviations],
             "allVideosValidated": True,
         },
     }

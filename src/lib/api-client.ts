@@ -300,3 +300,38 @@ export const videoApi = {
       body: JSON.stringify(data),
     }),
 };
+// ── Project API (for TanStack Query hooks) ────────────────────────────────────
+export type ProjectResponse = {
+  id: string;
+  user_id: string;
+  product_name: string;
+  product_type: string;
+  product_description: string;
+  product_url: string;
+  target_audience: string;
+  primary_cta: string;
+  tiktok_handle: string;
+  tracking_slug: string;
+  tracking_url: string;
+  destination_url: string;
+  context_version: number;
+  onboarded_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProjectUpdateRequest = Partial<
+  Pick<ProjectResponse,
+    "product_name" | "product_type" | "product_description" | "product_url"
+    | "target_audience" | "primary_cta" | "tiktok_handle" | "destination_url"
+  >
+>;
+
+export const projectApi = {
+  getCurrent: () => apiFetch<ProjectResponse>("/api/projects/current"),
+  update: (id: string, data: ProjectUpdateRequest) =>
+    apiFetch<ProjectResponse>(`/api/projects/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+};
