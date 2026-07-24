@@ -87,5 +87,4 @@ clean:
 
 ## reset-db    Wipe the database and reseed from init scripts
 reset-db:
-	docker compose down -v
-	docker compose up -d db
+	@echo "DB is managed by supabase start. To reset, run: supabase db reset"

@@ -1,49 +1,30 @@
+# Content Lab — uses supabase start for DB (port 54322)
 services:
-  db:
-    image: postgres:15-alpine
-    ports:
-      - 55432:5432
-    volumes:
-      - db_data:/var/lib/postgresql/data
-      - ./docker/postgres-init:/docker-entrypoint-initdb.d
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   backend:
     image: content-lab-app
     build:
       context: ./backend
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/postgres
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:54322/postgres
       SUPABASE_URL: http://backend:8000
       SUPABASE_ANON_KEY: local-anon-key
       ENVIRONMENT: development
       TIKTOK_METRICS_PROVIDER: fake
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    command: >
-      uvicorn app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
     image: content-lab-app
+    restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/postgres
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:54322/postgres
       SUPABASE_URL: http://backend:8000
       SUPABASE_ANON_KEY: local-anon-key
       ENVIRONMENT: development
@@ -51,9 +32,6 @@ services:
       WORKER_ID: worker-1
       WORKER_POLL_INTERVAL: "5"
       WORKER_HEARTBEAT_INTERVAL: "30"
-    depends_on:
-      db:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: python -m app.workers
-volumes:
-  db_data:
