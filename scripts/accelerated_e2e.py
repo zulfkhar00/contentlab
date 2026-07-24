@@ -93,8 +93,22 @@ class Timeline:
             )
             lines.append(f"| {ev['elapsed']} | {ev['msg']} {dets} |")
         lines += ["", "## Results", ""]
+        # Per-key PASS semantics. Naïve `if v else FAIL` treats 0 as failure,
+        # but 0 is the *good* outcome for manual_interventions, and 0 for
+        # views_delta is valid under the fake metrics provider.
+        pass_checks = {
+            "manual_interventions": lambda v: v == 0,
+            "A_views_delta": lambda v: isinstance(v, int) and v >= 0,
+            "B_views_delta": lambda v: isinstance(v, int) and v >= 0,
+            "C_views_delta": lambda v: isinstance(v, int) and v >= 0,
+            "A_unique_clicks": lambda v: isinstance(v, int) and v >= 1,
+            "B_unique_clicks": lambda v: isinstance(v, int) and v >= 1,
+            "C_unique_clicks": lambda v: isinstance(v, int) and v >= 1,
+            "total_jobs": lambda v: isinstance(v, int) and v == 16,
+        }
         for k, v in results.items():
-            icon = "PASS" if v else "FAIL"
+            check = pass_checks.get(k, bool)
+            icon = "PASS" if check(v) else "FAIL"
             lines.append(f"- [{icon}] {k}: `{v}`")
         lines += ["", f"## Manual Interventions — Total: {len(self.interventions)}", ""]
         lines += self.interventions if self.interventions else ["- (none)"]
