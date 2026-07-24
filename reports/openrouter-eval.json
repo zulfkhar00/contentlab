@@ -1,120 +1,120 @@
 {
   "provider": "openrouter",
   "total_cases": 14,
-  "passed": 0,
-  "failed": 14,
+  "passed": 12,
+  "failed": 2,
   "results": [
     {
       "case": "gen_hyp_standard_product",
       "operation": "generateHypotheses",
-      "passed": false,
-      "latency_ms": 22956,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 23716,
+      "error": null,
+      "output_preview": "[{\"title\": \"Pain-first hook vs curiosity-gap hook\", \"statement\": \"Opening with a direct statement of founder pain (waste"
     },
     {
       "case": "gen_hyp_minimal_project",
       "operation": "generateHypotheses",
       "passed": false,
-      "latency_ms": 22834,
-      "error": "Expecting value: line 1 column 1 (char 0)",
+      "latency_ms": 28596,
+      "error": "Output contains invented monetary claim: $2,000",
       "output_preview": ""
     },
     {
       "case": "design_exp_flagd",
       "operation": "designExperiment",
-      "passed": false,
-      "latency_ms": 20153,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 20169,
+      "error": null,
+      "output_preview": "{\"experiment_name\": \"Pain Hook vs Product Demo Opening \\u2014 Technical Founders Distribution\", \"shared_constraints\": {\""
     },
     {
       "case": "design_exp_comments_metric",
       "operation": "designExperiment",
-      "passed": false,
-      "latency_ms": 19113,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 23335,
+      "error": null,
+      "output_preview": "{\"experiment_name\": \"Founder Pain-Story vs Feature Demo Opening \\u2014 Trust & Clicks Experiment\", \"shared_constraints\":"
     },
     {
       "case": "revise_brief_punchier",
       "operation": "reviseBrief",
-      "passed": false,
-      "latency_ms": 49,
-      "error": "Error code: 400 - {'error': {'message': 'anthropic/claude-haiku-4-5-20251001 is not a valid model ID', 'code': 400}, 'user_id': 'user_3F09xdZVUVzJ0gj1CzT95WRXTE4'}",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 2086,
+      "error": null,
+      "output_preview": "{\"hook\": \"$2,000 in ads. Zero users. Here's what I did wrong.\", \"hook_delivery_note\": \"Deliver with frustration in your "
     },
     {
       "case": "revise_brief_shorten",
       "operation": "reviseBrief",
-      "passed": false,
-      "latency_ms": 15,
-      "error": "Error code: 400 - {'error': {'message': 'anthropic/claude-haiku-4-5-20251001 is not a valid model ID', 'code': 400}, 'user_id': 'user_3F09xdZVUVzJ0gj1CzT95WRXTE4'}",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 1656,
+      "error": null,
+      "output_preview": "{\"hook\": \"I built a product nobody found.\", \"hook_delivery_note\": \"Deliver with a mix of frustration and realization, pa"
     },
     {
       "case": "analyze_flagd_directional",
       "operation": "analyzeExperiment",
-      "passed": false,
-      "latency_ms": 9301,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 8462,
+      "error": null,
+      "output_preview": "{\"outcome_type\": \"directional_difference\", \"outcome_description\": \"The founder failure story opening produced notably mo"
     },
     {
       "case": "analyze_mixed_result",
       "operation": "analyzeExperiment",
-      "passed": false,
-      "latency_ms": 7732,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 8406,
+      "error": null,
+      "output_preview": "{\"outcome_type\": \"little_difference\", \"outcome_description\": \"All three opening framings produced nearly identical click"
     },
     {
       "case": "analyze_insufficient_views",
       "operation": "analyzeExperiment",
-      "passed": false,
-      "latency_ms": 8099,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 8059,
+      "error": null,
+      "output_preview": "{\"outcome_type\": \"insufficient_evidence\", \"outcome_description\": \"The evidence shows small directional differences favor"
     },
     {
       "case": "analyze_execution_deviation",
       "operation": "analyzeExperiment",
-      "passed": false,
-      "latency_ms": 8727,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 8687,
+      "error": null,
+      "output_preview": "{\"outcome_type\": \"execution_problem\", \"outcome_description\": \"Variant B produced the strongest click rate by a wide marg"
     },
     {
       "case": "analyze_zero_views_variant",
       "operation": "analyzeExperiment",
       "passed": false,
-      "latency_ms": 7870,
-      "error": "Expecting value: line 1 column 1 (char 0)",
+      "latency_ms": 9253,
+      "error": "Expected insufficient_evidence, got execution_problem",
       "output_preview": ""
     },
     {
       "case": "candidates_from_directional",
       "operation": "generateCandidates",
-      "passed": false,
-      "latency_ms": 9365,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 10238,
+      "error": null,
+      "output_preview": "[{\"slot\": \"safest_next_step\", \"relationship_type\": \"replication\", \"statement\": \"Re-run the founder failure story vs. pro"
     },
     {
       "case": "candidates_from_mixed",
       "operation": "generateCandidates",
-      "passed": false,
-      "latency_ms": 10246,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 9429,
+      "error": null,
+      "output_preview": "[{\"slot\": \"safest_next_step\", \"relationship_type\": \"replication\", \"statement\": \"A founder failure story opening will aga"
     },
     {
       "case": "candidates_from_insufficient",
       "operation": "generateCandidates",
-      "passed": false,
-      "latency_ms": 9534,
-      "error": "Expecting value: line 1 column 1 (char 0)",
-      "output_preview": ""
+      "passed": true,
+      "latency_ms": 10052,
+      "error": null,
+      "output_preview": "[{\"slot\": \"safest_next_step\", \"relationship_type\": \"replication\", \"statement\": \"Re-run the founder failure story vs. pro"
     }
   ]
 }

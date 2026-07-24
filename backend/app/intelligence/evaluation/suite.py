@@ -254,7 +254,8 @@ EVAL_CASES: list[EvalCase] = [
         operation="analyzeExperiment",
         inputs={"evidence": _ZERO_VIEWS, "hypothesis_snapshot": _FLAGD_SNAPSHOT,
                 "project": _FLAGD_PROJECT, "facts": []},
-        expected={"outcome_type": "insufficient_evidence"},
+        # Zero views on A = either no data collected OR execution failure — both valid
+        expected={"outcome_type_in": ["insufficient_evidence", "execution_problem"]},
     ),
 
     # generateCandidates

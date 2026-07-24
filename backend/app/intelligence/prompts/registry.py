@@ -28,6 +28,12 @@ Return ONLY a JSON array. Each element must have exactly these keys:
 primary_metric must be one of:
   clicks_per_1k_views, comments_per_1k_views, views, product_clicks, comments
 
+Do not include specific dollar amounts, user counts, conversion rates,
+revenue figures, or other quantitative performance claims in any field
+unless they appear verbatim in the verified_facts list above.
+If no verified facts are provided, do not include any first-person
+quantitative claims.
+
 Do not include any text outside the JSON array."""
 
 _GEN_HYP_USER = """Product context:
@@ -166,7 +172,7 @@ Generate exactly 3 follow-up candidates (one per slot). Return a JSON array."""
 
 PROMPTS = {
     "generateHypotheses": PromptSpec(
-        version="v1.2026-07",
+        version="v1.1.2026-07",  # added no-invented-facts prohibition
         system=_GEN_HYP_SYSTEM,
         user_template=_GEN_HYP_USER,
     ),
