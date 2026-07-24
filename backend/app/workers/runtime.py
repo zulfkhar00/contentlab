@@ -47,13 +47,14 @@ async def _claim(worker_id: str, job_types: list[str], lease_seconds: int) -> di
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text("SELECT * FROM claim_job(:wid, :types, :lease)").bindparams(
-        bindparam("wid", type_=Text()),
-        bindparam("types", type_=ARRAY(Text())),
-        bindparam("lease", type_=Integer()),
-    ),
+                bindparam("wid", type_=Text()),
+                bindparam("types", type_=ARRAY(Text())),
+                bindparam("lease", type_=Integer()),
+            ),
             {"wid": worker_id, "types": job_types, "lease": lease_seconds},
         )
         row = result.mappings().first()
+        await db.commit()
         return dict(row) if row else None
 
 
@@ -69,6 +70,7 @@ async def _heartbeat_loop(worker_id: str, job_id: str, stop: asyncio.Event) -> N
                     text("SELECT extend_job_lease(:jid, :wid, :secs)"),
                     {"jid": job_id, "wid": worker_id, "secs": settings.worker_lease_seconds},
                 )
+                await db.commit()
         except Exception as exc:
             log.warning("Heartbeat failed for job %s: %s", job_id, exc)
 
@@ -79,6 +81,7 @@ async def _complete(worker_id: str, job_id: str, result: dict) -> None:
             text("SELECT complete_job(:jid, :wid, :result)"),
             {"jid": job_id, "wid": worker_id, "result": json.dumps(result)},
         )
+        await db.commit()
 
 
 async def _fail(worker_id: str, job_id: str, error: str) -> None:
@@ -87,6 +90,7 @@ async def _fail(worker_id: str, job_id: str, error: str) -> None:
             text("SELECT fail_job(:jid, :wid, :err)"),
             {"jid": job_id, "wid": worker_id, "err": error},
         )
+        await db.commit()
 
 
 async def _process_job(worker_id: str, job: dict) -> None:
