@@ -14,6 +14,7 @@ Security rules
 import hashlib
 import hmac as _hmac_mod
 import ipaddress
+import json
 import logging
 import secrets
 from typing import List
@@ -203,7 +204,7 @@ async def persist_redirect_event(
             "vk": visitor_key,
             "uniq": is_unique,
             "dest": destination_url,
-            "meta": str({k: v for k, v in request_metadata.items() if k != "ip"}),
+            "meta": json.dumps({k: v for k, v in request_metadata.items() if k != "ip"}),
         },
     )
     await db.commit()
