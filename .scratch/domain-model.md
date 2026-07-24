@@ -1,39 +1,74 @@
+# Content Lab — Domain Model (Revised)
 
-# Content Lab -- Domain Model
-
-Pre-schema deliverable. Present this before writing any migrations.
+**Attribution policy locked:** Isolated windows — publish A, track 72h, then B, then C.  
+**Retry policy locked:** One Experiment per Hypothesis; reruns are Video-level (multiple Video attempts per Variant).  
+**Script storage:** Flexible `script_sections` JSONB on Variant; `shared_constraints` JSONB on Experiment.  
+**Variant/Video state:** Clean separation — Variant owns design lifecycle; Video owns publication lifecycle.
 
 ---
 
-## 1. Entity Relationships
+## Entity List
 
 ```
+Project
+Hypothesis
+Experiment
+Variant
+Video
+VideoMetricSnapshot
+ExecutionObservation
+RedirectEvent
+AttributionWindow
+ExperimentEvidenceSnapshot
+ExperimentEvidenceItem
+Insight
+FollowUpCandidate
+AIRun
+```
+
+---
+
+## Relationships
+
+```
+AuthUser 1:1 Project
+
 Project 1:many Hypothesis
 Project 1:many Experiment
+Project 1:many RedirectEvent
+
 Hypothesis 1:1 Experiment
-Experiment 1:3 Variant
-Variant 1:many Video (typically 1; reruns may create more)
-Video 1:many VideoMetricSnapshot
-Variant 1:1 VariantObservation
-Experiment 1:1 ExperimentEvidenceSnapshot
-ExperimentEvidenceSnapshot 1:1 Insight
-Insight 1:many FollowUpCandidate (typically 3)
-FollowUpCandidate 0:1 Hypothesis (null until accepted)
 Hypothesis self-referential via parent_hypothesis_id
+
+Experiment 1:3 Variant
+Experiment 1:many ExperimentEvidenceSnapshot (versioned)
+Variant 1:many Video
+
+Video 1:many VideoMetricSnapshot
+Video 0:1 ExecutionObservation
+Video 0:many AttributionWindow
+
+ExperimentEvidenceSnapshot 1:3 ExperimentEvidenceItem
+ExperimentEvidenceItem references exactly one Variant and one Video attempt
+ExperimentEvidenceSnapshot 1:1 Insight
+
+Insight 1:many FollowUpCandidate (typically 3)
+FollowUpCandidate 0:1 Hypothesis
+Hypothesis references its origin via source_candidate_id
 ```
 
 ---
 
-## 2. Entities
+## Entities
 
 ### Project
-One per founder account. `tracking_slug` is backend-generated — client must never own uniqueness.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
+| user_id | uuid | FK auth.users; unique (one project per user in MVP) |
 | product_name | text | |
-| product_type | text | SaaS, Mobile App, AI App, Service, Waitlist |
+| product_type | product_type_enum | SaaS, Mobile App, AI App, Service, Waitlist — constrained |
 | product_description | text | primary AI prompt context |
 | product_url | text | |
 | target_audience | text | |
@@ -42,19 +77,23 @@ One per founder account. `tracking_slug` is backend-generated — client must ne
 | current_alternatives | text | |
 | desired_action | text | |
 | primary_cta | text | |
-| tiktok_handle | text | |
+| tiktok_handle | text | stored without leading @; normalized on write |
 | account_public | boolean | |
 | manual_publish | boolean | |
-| tracking_slug | text | unique; backend-generated |
+| tracking_slug | text | unique; backend-generated; never client-computed |
 | destination_url | text | initially = product_url; separately editable |
+| context_version | integer | default 1; incremented when AI-relevant context changes |
 | onboarded_at | timestamp | null until onboarding complete |
 | created_at | timestamp | |
+| updated_at | timestamp | |
+| deleted_at | timestamp | nullable soft deletion |
+
+**context_version increments when user changes:** product_description, target_audience, problem_solved, why_it_matters, desired_action, primary_cta, current_alternatives.  
+Every AIRun records the context_version used. This prevents stale AI output from being applied after context changes.
 
 ---
 
 ### Hypothesis
-Testable belief. Exists before experiment. Lineage explicit via parent_hypothesis_id.  
-**UI label mapping:** `generated` → "Suggested", `tested` → "Learned"
 
 | Column | Type | Notes |
 |---|---|---|
@@ -73,135 +112,273 @@ Testable belief. Exists before experiment. Lineage explicit via parent_hypothesi
 | category | text | |
 | status | hypothesis_status | generated, draft, approved, testing, tested, rejected |
 | parent_hypothesis_id | uuid | FK Hypothesis self; null for cold-start |
-| source_insight_id | uuid | FK Insight; null for cold-start |
+| source_candidate_id | uuid | FK FollowUpCandidate; UNIQUE nullable; null for cold-start |
 | relationship_type | hypothesis_relationship | replication, mechanism_isolation, parameter_optimization, generalization, counter_hypothesis, recovery_redesign |
 | previous_learning | text | carried from FollowUpCandidate on acceptance |
 | remaining_unknown | text | carried from FollowUpCandidate on acceptance |
+| recommendation_reason | text | why AI marked the source candidate as recommended |
+| created_by_ai_run_id | uuid | FK AIRun; null for manually created hypotheses |
 | created_at | timestamp | |
+| updated_at | timestamp | |
 | approved_at | timestamp | |
+| rejected_at | timestamp | |
+| tested_at | timestamp | set when experiment reaches completed |
+
+**Removed:** `source_insight_id` — derive via `source_candidate_id → FollowUpCandidate → Insight`.  
+**UI labels:** `generated` = "Suggested", `tested` = "Learned"
 
 ---
 
 ### Experiment
-One per approved Hypothesis. Status must be **persisted** — do not derive from variants alone.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | project_id | uuid | FK Project |
-| hypothesis_id | uuid | FK Hypothesis; unique |
+| hypothesis_id | uuid | FK Hypothesis; UNIQUE |
 | name | text | |
 | cta | text | |
-| tracking_window_hours | integer | default 72 |
+| tracking_window_hours | integer | default 72; CHECK > 0 |
 | status | experiment_status | ready, in_progress, tracking, analyzing, completed, cancelled |
-| script_lesson | text | locked segment shared across all variants |
-| script_product | text | locked segment |
-| script_cta | text | locked segment |
-| script_target_duration_label | text | e.g. 50s |
+| hypothesis_design_snapshot | jsonb | immutable copy of approved design at experiment creation time |
+| shared_constraints | jsonb | elements kept constant across all variants (replaces fixed script columns) |
 | created_at | timestamp | |
 | completed_at | timestamp | null until status = completed |
+
+**hypothesis_design_snapshot** contains: researchQuestion, statement, independentVariable, controlCondition, treatmentCondition, primaryMetric, controlledElements, contradictionCondition — copied at experiment creation and never updated.
+
+**shared_constraints** example:
+```json
+{
+  "lesson": "I thought building the product was the hard part.",
+  "product": "That is why I built Content Lab...",
+  "cta": "Check the link in my bio.",
+  "targetDurationLabel": "50s",
+  "audience": "Technical founders",
+  "format": "Talking head"
+}
+```
 
 ---
 
 ### Variant
-Three per experiment. Use `variant_id` as identifier — `role` (A/B/C) is not globally unique.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | experiment_id | uuid | FK Experiment |
-| role | text | A, B, C; unique within experiment |
-| role_label | text | Control, Hypothesis Treatment, Alternative Treatment |
+| position | text | A, B, C; UNIQUE within experiment; CHECK IN ('A','B','C') |
+| treatment_role | text | control, hypothesis_treatment, alternative_treatment |
 | title | text | |
-| variable_under_test | text | |
+| variable_value | text | this variant's assigned value of the variable under test |
 | hook | text | AI-generated; editable via Brief Editor |
 | hook_delivery_note | text | AI-generated; editable |
 | context | text | AI-generated; editable |
 | on_screen_text | text | AI-generated; editable |
-| status | variant_status | queued, ready_to_review, approved_for_recording, recorded, needs_url, validating, tracking, completed |
+| script_sections | jsonb | flexible section array (see schema below) |
+| status | variant_status | queued, ready_to_review, approved_for_recording, recorded |
 | approved_for_recording_at | timestamp | |
 | recorded_at | timestamp | |
 | created_at | timestamp | |
 
-Error states: `invalid_url`, `account_mismatch`, `video_private`, `video_deleted`, `tracking_failed`
+**Variant.status is the design lifecycle only.** Publication state lives on Video.
+
+**script_sections** schema:
+```json
+[
+  {
+    "key": "hook",
+    "startSecond": 0,
+    "endSecond": 5,
+    "mode": "variable",
+    "text": "I spent almost $2,000 on ads..."
+  },
+  {
+    "key": "product",
+    "startSecond": 25,
+    "endSecond": 42,
+    "mode": "controlled",
+    "text": "That is why I built Content Lab..."
+  }
+]
+```
+
+`mode` values: `variable` or `controlled`. This replaces fixed `script_lesson`, `script_product`, `script_cta` columns and supports any future variable being tested.
+
+**Frontend display status** is derived from Variant.status + current Video.status — not stored:
+```
+Variant.approved_for_recording + Video.tracking = display "Tracking"
+Variant.recorded + Video.needs_url              = display "Paste URL"
+```
 
 ---
 
 ### Video
-Published TikTok artifact. **Separate from Variant.** A future rerun may create another Video for the same Variant.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | variant_id | uuid | FK Variant |
-| tiktok_url | text | |
-| published_at | timestamp | starts tracking window |
-| status | video_status | needs_url, validating, tracking, completed, invalid_url, account_mismatch, video_private, video_deleted, tracking_failed |
-| tracking_window_ends_at | timestamp | derived at insert: published_at + window_hours |
+| attempt_number | integer | starts at 1; UNIQUE with variant_id |
+| is_current | boolean | true for one attempt per Variant; partial unique index |
+| status | video_status | needs_url, validating, tracking, completed + error states |
+| submitted_url | text | nullable; URL entered by founder |
+| normalized_tiktok_url | text | nullable; canonical URL after validation |
+| tiktok_video_id | text | nullable; extracted during validation; unique when set |
+| user_confirmed_published_at | timestamp | nullable; when founder confirmed publication |
+| published_at | timestamp | nullable; public timestamp when available |
+| validated_at | timestamp | nullable; when backend confirmed video is accessible |
+| tracking_started_at | timestamp | nullable; when tracking window opened |
+| tracking_window_ends_at | timestamp | nullable; = tracking_started_at + experiment.tracking_window_hours |
+| last_refreshed_at | timestamp | nullable; last metric collection time |
 | created_at | timestamp | |
+| updated_at | timestamp | |
+
+`tracking_window_ends_at` is computed only after `tracking_started_at` is set — not at URL submission.
+
+Error states: `invalid_url`, `account_mismatch`, `video_private`, `video_deleted`, `tracking_failed`
 
 ---
 
 ### VideoMetricSnapshot
-Point-in-time metrics via phone automation. Multiple per Video over the tracking window.
+
+TikTok-sourced metrics only. **Does not contain clicks** — clicks come from RedirectEvent via AttributionWindow.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
 | video_id | uuid | FK Video |
 | collected_at | timestamp | |
-| views | integer | |
-| likes | integer | |
-| comments | integer | |
-| clicks | integer | link-in-bio redirects |
-| clicks_per_1k | numeric | derived at insert: clicks / views * 1000 |
+| views | integer | CHECK >= 0 |
+| likes | integer | CHECK >= 0 |
+| comments | integer | CHECK >= 0 |
+| collection_job_id | uuid | nullable; FK to background job that triggered collection |
+| created_at | timestamp | |
 
 ---
 
-### VariantObservation
-Founder-reported execution quality. `drop_off_at` and `sentiment` are **anecdotal** — not automated.
+### ExecutionObservation
+
+Founder-reported quality of a **specific Video attempt** — not the abstract Variant.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
-| variant_id | uuid | FK Variant; unique |
-| delivered_variable | boolean | null until founder answers |
-| reason | text | why it did or did not deliver |
+| video_id | uuid | FK Video; UNIQUE |
+| delivered_variable | boolean | nullable until founder answers |
+| used_approved_hook | boolean | nullable |
+| used_fixed_cta | boolean | nullable |
+| actual_duration_seconds | integer | nullable; CHECK >= 0 |
+| actual_product_reveal_seconds | integer | nullable; CHECK >= 0 |
+| format_changed | boolean | nullable |
+| audience_framing_changed | boolean | nullable |
+| offer_changed | boolean | nullable |
+| publishing_schedule_changed | boolean | nullable |
+| reason | text | why variable was or was not delivered |
 | notes | text | free-form qualitative notes |
 | unexpected | text | surprising signals |
-| drop_off_at | text | anecdotal timecode — founder-entered, not automated |
-| sentiment | text | founder-read comment sentiment — not automated |
+| perceived_drop_off_at | text | anecdotal timecode — founder-entered, never automated |
+| founder_observed_comment_sentiment | text | founder-read sentiment — never automated |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
 ---
 
-### ExperimentEvidenceSnapshot
-Immutable. AI receives this. **Never mutated after creation.** Insight references it; it does not reference Insight.
+### RedirectEvent
+
+Click event from the permanent tracking link. Attribution to a Variant happens via AttributionWindow, not directly on this table.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
-| experiment_id | uuid | FK Experiment; unique |
+| project_id | uuid | FK Project |
+| occurred_at | timestamp | |
+| destination_url | text | URL the visitor was sent to |
+| deduplication_key | text | unique; prevents double-counting |
+| request_metadata | jsonb | minimum fields for dedup and abuse detection only |
+| created_at | timestamp | |
+
+---
+
+### AttributionWindow
+
+Defines the time interval during which RedirectEvents are attributed to a specific Video attempt. Under the **isolated windows** policy, windows are non-overlapping.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| project_id | uuid | FK Project |
+| experiment_id | uuid | FK Experiment |
+| variant_id | uuid | FK Variant |
+| video_id | uuid | FK Video |
+| method | attribution_method | isolated_window, exclusive_interval, experiment_only |
+| starts_at | timestamp | |
+| ends_at | timestamp | |
+| created_at | timestamp | |
+
+**Isolated window policy:** `starts_at` = Video.tracking_started_at; `ends_at` = Video.tracking_window_ends_at. No two windows for the same experiment overlap.
+
+To count attributed clicks:
+```sql
+SELECT COUNT(*) FROM redirect_events r
+JOIN attribution_windows w ON w.project_id = r.project_id
+  AND r.occurred_at BETWEEN w.starts_at AND w.ends_at
+WHERE w.video_id = ?
+```
+
+---
+
+### ExperimentEvidenceSnapshot
+
+Versioned per-experiment evidence record. Not permanently 1:1 — supports regeneration if attribution windows are refined.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| experiment_id | uuid | FK Experiment |
+| version | integer | starts at 1 |
+| status | snapshot_status | pending, ready, finalized |
+| attribution_method | attribution_method | matches the method used for all items |
 | generated_at | timestamp | |
-| variant_results | jsonb | final metrics per variant |
-| calculated_comparisons | jsonb | lift, clicks_per_1k per variant |
-| execution_deviations | jsonb | from VariantObservation.delivered_variable = false |
-| attribution_conditions | jsonb | window durations, collection timestamps |
+| finalized_at | timestamp | null until status = finalized |
+| created_by_job_id | uuid | nullable; background job that triggered generation |
+
+---
+
+### ExperimentEvidenceItem
+
+One row per Variant in the snapshot. Identifies exactly which Video attempt and which metric interval were analyzed.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid | PK |
+| evidence_snapshot_id | uuid | FK ExperimentEvidenceSnapshot |
+| variant_id | uuid | FK Variant |
+| video_id | uuid | FK Video; the specific attempt analyzed |
+| start_metric_snapshot_id | uuid | FK VideoMetricSnapshot; first snapshot in interval |
+| end_metric_snapshot_id | uuid | FK VideoMetricSnapshot; last snapshot in interval |
+| views_delta | integer | views at end minus views at start |
+| likes_delta | integer | |
+| comments_delta | integer | |
+| attributed_clicks | integer | RedirectEvents within AttributionWindow for this video |
+| clicks_per_1k | numeric | = attributed_clicks / views_delta * 1000 |
+| execution_observation_id | uuid | FK ExecutionObservation; nullable if not submitted |
+| attribution_conditions | jsonb | snapshot of the AttributionWindow used |
 
 ---
 
 ### Insight
-AI interpretation of evidence snapshot. References snapshot — **never duplicates raw metric columns.**
+
+References the finalized evidence snapshot. Never duplicates raw metric columns.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid | PK |
-| experiment_id | uuid | FK Experiment; unique |
-| evidence_snapshot_id | uuid | FK ExperimentEvidenceSnapshot |
-| research_question | text | copied from source Hypothesis at archival time |
-| hypothesis_text | text | copied from source Hypothesis |
-| primary_metric | text | copied from Experiment |
+| experiment_id | uuid | FK Experiment |
+| evidence_snapshot_id | uuid | FK ExperimentEvidenceSnapshot; the exact snapshot analyzed |
+| research_question | text | copied from hypothesis_design_snapshot at archival time |
+| hypothesis_text | text | copied from hypothesis_design_snapshot |
+| primary_metric | text | copied from hypothesis_design_snapshot |
 | supported_learning | text | AI-generated |
 | evidence_basis | text | AI-generated |
 | do_not_infer_yet | text[] | AI-generated |
@@ -214,6 +391,7 @@ AI interpretation of evidence snapshot. References snapshot — **never duplicat
 ---
 
 ### FollowUpCandidate
+
 Proposed next hypothesis. Dismissal does **not** create a rejected Hypothesis.
 
 | Column | Type | Notes |
@@ -224,9 +402,10 @@ Proposed next hypothesis. Dismissal does **not** create a rejected Hypothesis.
 | statement | text | AI-generated |
 | why_this_follows | text | AI-generated |
 | recommended | boolean | AI marks one candidate |
+| recommendation_reason | text | AI-generated; why this one is recommended |
 | relationship_type | hypothesis_relationship | |
-| previous_learning | text | carried to new Hypothesis if accepted |
-| remaining_unknown | text | carried to new Hypothesis if accepted |
+| previous_learning | text | carried to Hypothesis if accepted |
+| remaining_unknown | text | carried to Hypothesis if accepted |
 | status | candidate_status | proposed, accepted, dismissed |
 | accepted_hypothesis_id | uuid | FK Hypothesis; null until accepted |
 | created_at | timestamp | |
@@ -234,7 +413,8 @@ Proposed next hypothesis. Dismissal does **not** create a rejected Hypothesis.
 ---
 
 ### AIRun
-Provenance for AI-generated fields. Live entity becomes canonical after approval; AIRun preserves origin. Append-only.
+
+Provenance for AI-generated fields. Append-only. Entity field becomes canonical after user approval; AIRun preserves origin.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -243,13 +423,14 @@ Provenance for AI-generated fields. Live entity becomes canonical after approval
 | entity_id | uuid | |
 | field_name | text | e.g. hook, statement, supported_learning |
 | model | text | e.g. claude-opus-4-7 |
-| prompt_hash | text | sha256 of prompt used |
+| context_version | integer | Project.context_version at time of generation |
+| prompt_hash | text | sha256 of prompt |
 | output | text | raw generated text before user edits |
 | created_at | timestamp | |
 
 ---
 
-## 3. State Enums and Transition Rules
+## State Enums and Transition Rules
 
 ### hypothesis_status
 
@@ -262,253 +443,240 @@ generated → approved
 
 draft → approved
   trigger: POST /hypotheses/{id}/approve
-  guard: statement + independent_variable + primary_metric must be non-empty
+  guard: statement + independent_variable + primary_metric non-empty
 
 approved → testing
-  trigger: backend sets when experiment.status transitions to in_progress
+  trigger: backend sets when experiment.status = in_progress
 
 testing → tested
-  trigger: backend sets when experiment.status transitions to completed
+  trigger: backend sets when experiment.status = completed
 
 generated|draft|approved → rejected
-  trigger: explicit founder rejection
+  trigger: explicit founder action
 
 rejected → draft
-  trigger: founder reopens for editing
+  trigger: founder reopens
 ```
-
-UI labels: `generated` = "Suggested", `tested` = "Learned"
-
-**Gaps:**
-- `approved → testing` has no explicit API call today. Backend should set this when experiment.status = in_progress.
-- `testing → tested` requires backend to set this when experiment.status = completed.
-
----
 
 ### experiment_status
 
 ```
 ready → in_progress
-  trigger: first variant.status becomes tracking
+  trigger: first variant's current Video reaches tracking
 
 in_progress → tracking
-  trigger: all variants.status are tracking
+  trigger: all three variants' current Videos are tracking
 
 tracking → analyzing
-  trigger: all video tracking_window_ends_at have passed (backend cron)
+  trigger: all AttributionWindows have ended (cron)
+  side-effect: creates ExperimentEvidenceSnapshot, queues evidence collection
 
 analyzing → completed
-  trigger: Insight is generated and FollowUpCandidates are created
+  trigger: Insight and FollowUpCandidates generated
+  side-effect: sets hypothesis.tested_at; transitions hypothesis to tested
 
 ready|in_progress|tracking → cancelled
   trigger: explicit cancellation
 ```
 
-**Gaps:**
-- `analyzing` is a missing UI state. The frontend needs a waiting/loading screen for this transition.
-- `completed` must trigger hypothesis.status → tested.
+**Missing UI state:** `analyzing` needs a loading/waiting screen on the frontend.
 
----
-
-### variant_status
+### variant_status — design lifecycle only
 
 ```
 queued → ready_to_review
-  trigger: previous variant reaches tracking (or is first in sequence)
+  trigger: previous Variant's current Video reaches tracking
+  (or: is position A, which has no predecessor)
 
 ready_to_review → approved_for_recording
   trigger: POST /variants/{id}/approve
 
 approved_for_recording → recorded
   trigger: POST /variants/{id}/confirm-recorded
-
-recorded → needs_url
-  trigger: implicit
-
-needs_url → validating
-  trigger: founder pastes URL + passes 3-checkbox Publication modal
-
-validating → tracking
-  trigger: backend confirms URL is valid and video is public
-
-tracking → completed
-  trigger: backend cron — tracking_window_ends_at has passed
 ```
 
-Error states: `invalid_url`, `account_mismatch`, `video_private`, `video_deleted`, `tracking_failed`
+### video_status — publication lifecycle only
 
-**Gaps:**
-- `approved_for_recording` stage is local UI state today — must be persisted as variant.status.
-- `validating → tracking` requires backend URL validation; currently skipped.
+```
+(new row created) → needs_url
+  trigger: POST /variants/{id}/videos creates a new Video attempt
 
----
+needs_url → validating
+  trigger: founder submits URL + passes 3-checkbox Publication modal
+
+validating → tracking
+  trigger: backend confirms URL valid and video public
+  side-effect: sets tracking_started_at and tracking_window_ends_at
+               creates AttributionWindow (method = isolated_window)
+
+tracking → completed
+  trigger: cron — tracking_window_ends_at has passed
+  side-effect: closes AttributionWindow
+```
+
+Error states on Video: `invalid_url`, `account_mismatch`, `video_private`, `video_deleted`, `tracking_failed`
+
+**Display status derivation (never stored):**
+
+| Variant status | Current Video status | Display |
+|---|---|---|
+| queued | n/a | Queued |
+| ready_to_review | n/a | Ready to Record |
+| approved_for_recording | n/a | Approved |
+| recorded | needs_url | Paste URL |
+| recorded | validating | Validating |
+| recorded | tracking | Tracking |
+| recorded | completed | Completed |
+| recorded | any error | Error (+ error code) |
 
 ### candidate_status
 
 ```
 proposed → accepted
   trigger: POST /follow-up-candidates/{id}/accept
-  side-effect: creates a new Hypothesis with lineage from the candidate
+  side-effect: creates Hypothesis with lineage from candidate
+               sets candidate.accepted_hypothesis_id
 
 proposed → dismissed
   trigger: POST /follow-up-candidates/{id}/dismiss
   side-effect: nothing — no Hypothesis is created
 ```
 
-**Critical:** A dismissed candidate is NOT a rejected Hypothesis. Do not `PATCH /hypotheses/{id} status=rejected` for this.
+---
+
+## Attribution Policy: Isolated Windows
+
+With isolated windows, Variant A publishes first and its AttributionWindow runs for exactly `tracking_window_hours` before Variant B publishes. Windows are strictly non-overlapping.
+
+```
+A publishes  ──[  72h window A  ]──> B publishes ──[  72h window B  ]──> C publishes ──[  72h window C  ]──>
+```
+
+Click count for a Variant:
+```sql
+SELECT COUNT(DISTINCT r.deduplication_key)
+FROM redirect_events r
+JOIN attribution_windows w
+  ON w.project_id = r.project_id
+  AND r.occurred_at BETWEEN w.starts_at AND w.ends_at
+WHERE w.video_id = :video_id
+```
+
+Clicks/1K for evidence:
+```
+attributed_clicks / views_delta * 1000
+```
+
+`views_delta` uses the metric snapshot taken at window start and end — not total lifetime views — so all three variants have comparable denominators.
 
 ---
 
-## 4. Frontend-to-API View Models
+## Required Constraints
+
+```sql
+-- Tenancy
+UNIQUE (projects.user_id)
+UNIQUE (projects.tracking_slug)
+
+-- Hypothesis lineage
+UNIQUE (hypotheses.source_candidate_id)  -- nullable unique
+
+-- Experiment design integrity
+UNIQUE (experiments.hypothesis_id)
+
+-- Variant positioning
+UNIQUE (variants.experiment_id, variants.position)
+CHECK  (variants.position IN ('A', 'B', 'C'))
+
+-- Video attempt integrity
+UNIQUE (videos.variant_id, videos.attempt_number)
+-- Partial unique index for is_current:
+CREATE UNIQUE INDEX ON videos (variant_id) WHERE is_current = true;
+UNIQUE (videos.tiktok_video_id) WHERE tiktok_video_id IS NOT NULL
+UNIQUE (videos.normalized_tiktok_url) WHERE normalized_tiktok_url IS NOT NULL
+
+-- Metric non-negativity
+CHECK (video_metric_snapshots.views >= 0)
+CHECK (video_metric_snapshots.likes >= 0)
+CHECK (video_metric_snapshots.comments >= 0)
+CHECK (execution_observations.actual_duration_seconds >= 0)
+
+-- Evidence integrity
+CHECK (experiments.tracking_window_hours > 0)
+```
+
+Three Variants per Experiment cannot be enforced by a check constraint alone — create all three in one backend transaction and validate count before setting status = ready.
+
+---
+
+## View Models (unchanged from previous version except where noted)
 
 ### ProjectDetail
-**Screens:** /onboarding, /settings  
-**Sources:** Project  
-**Fields:** id, productName, productType, productDescription, productUrl, targetAudience, problemSolved, whyItMatters, currentAlternatives, desiredAction, primaryCta, tiktokHandle, accountPublic, manualPublish, trackingSlug, trackingUrl (server-computed), destinationUrl
-
----
-
-### OverviewResponse
-**Screen:** /overview  
-**Sources:** Project, Experiment + Variants, Hypothesis[], Insight  
-**Fields:** project summary, kpis (publishedVideos, totalClicks, completedExperiments, activeThreads), nextAction (title, description, cta — backend-computed), activeExperiment, latestInsight, hypothesisBacklog  
-**Note:** `nextAction` must be calculated by the backend. Do not push this domain logic into React.
-
----
-
-### HypothesisSummary
-**Screen:** /research (card list)  
-**Sources:** Hypothesis  
-**Fields:** id, title, status, primaryMetric, category, lineagePreview, resultPreview (clicks/1k from linked Insight if tested)  
-**Note:** Thread view needs parentHypothesisId on each summary to build the tree client-side without extra calls.
-
----
-
-### HypothesisDetail
-**Screen:** /research inspector, /research/[id]/review  
-**Sources:** Hypothesis, Insight (via source_insight_id), Hypothesis (parent)  
-**Fields:** all HypothesisSummary fields, statement, researchQuestion, independentVariable, controlCondition, treatmentCondition, controlledElements, contradictionCondition, rationale, lineage (parentHypothesisId, parentTitle, sourceInsightId, relationshipType, previousLearning, remainingUnknown)  
-**Note:** Include lineage context inline — /review must not need a separate call.
-
----
+Added: trackingUrl (computed), contextVersion, updatedAt
 
 ### ExperimentDetail
-**Screen:** /experiments  
-**Sources:** Experiment, Variant[], Video[], VideoMetricSnapshot[], Hypothesis (linked), VariantObservation[]  
-**Fields:** id, name, status, hypothesis (statement, independentVariable, controlledElements), primaryMetric, trackingWindowHours, cta, script, publishedCount, nextAction, variants [VariantSummary + latest Video + observation.notes presence]  
-**Note:** Integrity panel reads hypothesis.independentVariable and hypothesis.controlledElements — embed in ExperimentDetail directly.
-
----
+Now embeds hypothesisDesignSnapshot fields directly (researchQuestion, statement, independentVariable, controlledElements) — reads from snapshot, not live Hypothesis.
 
 ### VariantDetail
-**Screen:** /experiments/brief/[role], /experiments/observe/[role]  
-**Sources:** Variant, Experiment, Video, VideoMetricSnapshot[], VariantObservation  
-**Fields:** id, role, roleLabel, title, variableUnderTest, hook, hookDeliveryNote, context, onScreenText, status, experiment (name, cta, trackingWindowHours, script), video, latestMetrics, observation  
-**Note:** Brief page also needs project.targetAudience and project.primaryCta for the Keep Controlled section.
-
----
+Added: currentVideo (Video + ExecutionObservation), scriptSections array  
+Removed: variableUnderTest → replaced by variableValue
 
 ### VideoSummary
-**Screen:** /videos (table row)  
-**Sources:** Variant, Video, VideoMetricSnapshot (latest), Experiment  
-**Fields:** variantId, variantRole, variantTitle, roleLabel, experimentName, tiktokUrl, publishedAt, status, trackingWindowEndsAt, latestMetrics (views, likes, comments, clicks, clicksPer1k)  
-**Note:** No separate Video model at table level — VideoSummary is a join of Variant + Video + latest snapshot.
-
----
+New fields: attemptNumber, isCurrent, validatedAt, trackingStartedAt, attributedClicks (from latest AttributionWindow)  
+Removed: clicks, clicksPer1k (now from EvidenceItem, not snapshot)
 
 ### InsightDetail
-**Screen:** /insights (right panel)  
-**Sources:** Insight, ExperimentEvidenceSnapshot, FollowUpCandidate[]  
-**Fields:** id, experimentName, primaryMetric, completedAt, windowHours, researchQuestion, hypothesisText, evidence (control/treatment/alternative from snapshot), lift (computed at query time), supportedLearning, evidenceBasis, doNotInferYet, recommendedNextTest, limitations, outcome, nextCandidates [FollowUpCandidate + alreadyAccepted flag]  
-**Note:** `lift` is computed from snapshot data at query time — not stored on Insight.
+Added: evidenceItems (array — one per Variant — with views_delta, attributed_clicks, clicks_per_1k, video attempt reference, execution observation summary)  
+Removed: raw views/clicks duplication
 
 ---
 
-## 5. Stored vs Derived
+## Stored vs Derived (revised)
 
 | Field | Classification | Notes |
 |---|---|---|
-| Project.tracking_slug | stored | Generated once at creation; never recomputed |
-| Project.tracking_url | derived | contentlab.app/p/{slug} — constructed at query time |
-| Project.destination_url | stored | Editable; initially set from product_url |
-| Hypothesis.status | stored | Driven by explicit transitions; never inferred |
-| Hypothesis.parent_hypothesis_id | stored | Set when created from a FollowUpCandidate |
-| Experiment.status | stored | Persisted; transitions triggered by events or cron |
-| ExperimentStatus (display) | derived | Re-derived from experiment.status for display labels |
-| Variant.status | stored | Approval and recorded stages must not live only in React |
-| Video.tracking_window_ends_at | derived | Computed at insert: published_at + window_hours |
-| VideoMetricSnapshot.clicks_per_1k | stored (convenience) | Computed at insert for query performance |
-| Insight.lift | derived | Computed from evidence snapshot at query time; not stored |
-| ExperimentEvidenceSnapshot.* | stored (immutable) | Written once; never mutated |
-| FollowUpCandidate.status | stored | Persisted; not the same as Hypothesis.status |
-| OverviewResponse.nextAction | derived | Backend-computed from Experiment + Variant lifecycle |
-| OverviewResponse.kpis.publishedVideos | derived | COUNT variants with status = tracking or completed |
-| OverviewResponse.kpis.totalClicks | derived | SUM clicks from latest VideoMetricSnapshot per video |
-| OverviewResponse.kpis.completedExperiments | derived | COUNT experiments with status = completed |
-| OverviewResponse.kpis.activeThreads | derived | COUNT hypotheses with status = testing |
-
-**Rule:** Never store a derived value as a canonical field. Exception: VideoMetricSnapshot.clicks_per_1k is stored at insert as a performance convenience.
+| Project.tracking_slug | stored | Backend-generated once; never recomputed |
+| Project.tracking_url | derived | contentlab.app/p/{slug} — computed at response time |
+| Project.context_version | stored | Incremented by backend on relevant field changes |
+| Hypothesis.source_insight_id | removed | Derive via source_candidate_id → FollowUpCandidate → Insight |
+| Experiment.hypothesis_design_snapshot | stored (immutable) | Copied at creation; Hypothesis edits do not affect it |
+| Variant.display_status | derived | Computed from Variant.status + current Video.status |
+| Video.tracking_window_ends_at | stored | Computed at tracking start; stored for query performance |
+| VideoMetricSnapshot.clicks | removed | Clicks come from RedirectEvent + AttributionWindow |
+| ExperimentEvidenceItem.clicks_per_1k | stored | Computed at evidence finalization; stored immutably |
+| Insight.lift | derived | Computed at query from EvidenceItems |
+| ExperimentEvidenceSnapshot | stored (versioned) | Not permanently 1:1 with Experiment |
 
 ---
 
-## 6. AI Provenance Strategy
+## AI Provenance (revised)
 
-AI-generated fields become canonical on the entity after user approval. AIRun preserves origin. On edit, entity field is overwritten; AIRun is appended, not mutated.
+AIRun now records `context_version` alongside the entity reference. This makes it possible to detect when AI output was generated from a stale project context.
 
-### Hypothesis — AI-generated fields
-`title`, `statement`, `research_question`, `independent_variable`, `primary_metric`, `rationale`, `controlled_elements` (initial), `contradiction_condition` (initial)  
-**Lifecycle:** AI proposes at generation. User edits in /review overwrite the entity field. AIRun preserves the original proposal.  
-**Becomes canonical after:** status = approved
-
-### Variant — AI-generated fields
-`hook`, `hook_delivery_note`, `context`, `on_screen_text`, `variable_under_test`  
-**Lifecycle:** AI generates when experiment is created. Each revision attempt creates a new AIRun. Applying a revision overwrites the entity field.  
-**Becomes canonical after:** status = approved_for_recording
-
-### Insight — AI-generated fields
-`supported_learning`, `evidence_basis`, `do_not_infer_yet`, `recommended_next_test`, `limitations`, `outcome_label`, `outcome_description`  
-**Lifecycle:** Generated once from the immutable ExperimentEvidenceSnapshot. Never regenerated. AIRun records the exact prompt and model.  
-**Becomes canonical after:** Generated — immediately canonical; not user-editable
-
-### FollowUpCandidate — AI-generated fields
-`statement`, `why_this_follows`, `recommended`, `relationship_type`, `previous_learning`, `remaining_unknown`  
-**Lifecycle:** Generated alongside Insight. User accepts or dismisses — no editing. Acceptance copies AI fields to the new Hypothesis as initial values.  
-**Becomes canonical after:** Acceptance creates a new Hypothesis with these as starting values; then editable in /review
+Invalidation rule: if `hypothesis.created_by_ai_run_id → AIRun.context_version` is less than the current `Project.context_version`, the hypothesis was generated before the user updated their context. Surface a warning in the UI.
 
 ---
 
-## 7. FakeIntelligenceProvider Pattern
-
-Before Claude is wired, all AI generation routes through a `FakeIntelligenceProvider` that returns seeded data. The interface is identical to the real provider — swapping requires no UI or schema changes.
+## FakeIntelligenceProvider Interface
 
 ```typescript
 interface IntelligenceProvider {
-  generateHypotheses(project: ProjectContext): Promise<Hypothesis[]>
-  reviseBrief(variant: Variant, instruction: string): Promise<VariantBriefEdit>
-  generateInsight(snapshot: ExperimentEvidenceSnapshot): Promise<InsightPayload>
-  generateCandidates(insight: Insight): Promise<FollowUpCandidate[]>
+  generateHypotheses(project: ProjectDetail): Promise<HypothesisPayload[]>
+  reviseBrief(variant: VariantDetail, instruction: string): Promise<VariantBriefEdit>
+  generateInsight(snapshot: ExperimentEvidenceSnapshot, items: ExperimentEvidenceItem[]): Promise<InsightPayload>
+  generateCandidates(insight: InsightDetail): Promise<FollowUpCandidatePayload[]>
 }
 ```
 
-Implementation order:
-1. `FakeIntelligenceProvider` — returns SEED_HYPOTHESES, SEED_INSIGHTS etc.
-2. `ClaudeIntelligenceProvider` — calls real API
-3. Switch via environment config — no UI or schema changes required
-
 ---
 
-## 8. Pre-Migration Checklist
+## Pre-Migration Checklist (all items must be confirmed)
 
-Before writing migrations, confirm all of the following:
-
-- [ ] Backend uses `variant_id` as identifier — not `role`. Role is not globally unique.
-- [ ] `Experiment.status` is persisted — not derived from variant statuses alone.
-- [ ] Variant approval stages (`approved_for_recording`, `recorded`) are persisted as `variant.status` — not local React state.
-- [ ] `Video` is a separate table — not a field on Variant.
-- [ ] `FollowUpCandidate.status = dismissed` does NOT create a rejected Hypothesis.
-- [ ] `VariantObservation.drop_off_at` and `.sentiment` are founder-entered qualitative fields — not automated.
-- [ ] Public metrics are collected via phone automation — not a TikTok API dependency.
-- [ ] `Insight` references an immutable `ExperimentEvidenceSnapshot` — does not duplicate raw metric columns.
-- [ ] `trackingSlug` is backend-generated — browser must never own uniqueness.
-- [ ] `experiment.status = analyzing` is a persisted state — the UI needs a waiting screen for it.
-- [ ] `FollowUpCandidate` dismissal does not call `PATCH /hypotheses/{id}` — candidates have their own status lifecycle.
+- [x] **Attribution policy:** Isolated windows locked.
+- [x] **Retry model:** One Experiment per Hypothesis; reruns at Video level locked.
+- [x] **Variant/Video state separation:** Variant owns design lifecycle; Video owns publication lifecycle.
+- [x] **Script storage:** Flexible `script_sections` JSONB on Variant; `shared_constraints` JSONB on Experiment.
+- [ ] `projects.user_id` auth integration decided (Supabase Auth or custom).
+- [ ] `RedirectEvent` deduplication strategy confirmed (device fingerprint? session token?).
+- [ ] Background job infrastructure decided (cron for window close, metric collection, insight generation).
+- [ ] `context_version` increment triggers confirmed with product — which field changes are meaningful enough to invalidate prior AI output.
