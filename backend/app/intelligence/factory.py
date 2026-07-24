@@ -32,8 +32,14 @@ def get_intelligence_provider():
     INTELLIGENCE_PROVIDER=fake  → FakeIntelligenceProvider (default)
     INTELLIGENCE_PROVIDER=claude → AnthropicIntelligenceProvider
     """
-    if settings.intelligence_provider == "claude":
+    prov = settings.intelligence_provider
+    if prov == "claude":
         from app.intelligence.anthropic_provider import AnthropicIntelligenceProvider
         return AnthropicIntelligenceProvider()
+    if prov == "openrouter":
+        if not settings.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is required when INTELLIGENCE_PROVIDER=openrouter")
+        from app.intelligence.openrouter_provider import OpenRouterIntelligenceProvider
+        return OpenRouterIntelligenceProvider()
     from app.intelligence.fake import FakeIntelligenceProvider
     return FakeIntelligenceProvider()

@@ -47,6 +47,15 @@ def _make_provider(provider_name: str):
     if provider_name == "fake":
         from app.intelligence.fake import FakeIntelligenceProvider
         return FakeIntelligenceProvider()
+    elif provider_name == "openrouter":
+        key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not key:
+            sys.exit("OPENROUTER_API_KEY is required for --provider openrouter")
+        from app.config import settings as _s
+        if not _s.openrouter_api_key:
+            object.__setattr__(_s, "openrouter_api_key", key)
+        from app.intelligence.openrouter_provider import OpenRouterIntelligenceProvider
+        return OpenRouterIntelligenceProvider()
     elif provider_name == "claude":
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
@@ -143,7 +152,7 @@ async def _main(args: argparse.Namespace) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Content Lab intelligence evaluation runner")
-    parser.add_argument("--provider", choices=["fake", "claude"], default="fake",
+    parser.add_argument("--provider", choices=["fake", "claude", "openrouter"], default="fake",
                         help="Provider to evaluate (fake=no cost, claude=live API calls)")
     parser.add_argument("--suite", default="all",
                         help="'all' or comma-separated operation names")

@@ -30,11 +30,14 @@ async def run_canary(
             status_code=403,
             detail="Canary endpoint is only available in development environment."
         )
-    if settings.intelligence_provider == "fake":
+    prov = settings.intelligence_provider
+    if prov == "fake":
         raise HTTPException(
             status_code=422,
-            detail="INTELLIGENCE_PROVIDER=fake; set to 'claude' with a real API key."
+            detail="INTELLIGENCE_PROVIDER=fake; set to 'openrouter' or 'claude' with a real API key."
         )
+    if prov == "openrouter" and not settings.openrouter_api_key:
+        raise HTTPException(status_code=422, detail="OPENROUTER_API_KEY is required.")
 
     project_repo = ProjectRepository(db)
     project = await project_repo.get_by_scope(scope) or {**_FLAGD_PROJECT, "id": str(scope.project_id)}

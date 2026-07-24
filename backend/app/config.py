@@ -14,9 +14,10 @@ class Settings(BaseSettings):
     environment: str = "development"
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     tracking_base_url: str = "https://contentlab.app/p"
-    # Anthropic
+    # Intelligence
     anthropic_api_key: str = ""
-    intelligence_provider: str = "fake"  # "fake" | "claude"
+    openrouter_api_key: str = ""
+    intelligence_provider: str = "fake"  # "fake" | "claude" | "openrouter"
 
     # Per-operation model IDs (override via env vars)
     claude_model_generate_hypotheses: str = "claude-sonnet-5"
