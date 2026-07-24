@@ -51,3 +51,10 @@ reports/*.md
 .branches/
 supabase/.branches/
 supabase/.temp/
+# Next.js generated
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Diagnostic scripts
+diag_*.mjs
+diag_*.js
