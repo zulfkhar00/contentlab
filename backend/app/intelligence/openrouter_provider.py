@@ -98,24 +98,20 @@ async def _call(
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                # response_format omitted: Claude via OpenRouter ignores it
                 timeout=timeout,
             )
-        raw = (resp.choices[0].message.content or "").strip()
-        # Extract JSON if model wrapped it in markdown code fences
-        if not raw.startswith(("{", "[")):
+            raw = (resp.choices[0].message.content or "").strip()
             import re as _re
-            m = _re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw)
-            if m:
-                raw = m.group(1).strip()
-            else:
-                # Try to find first { or [ in the response
-                for sc, ec in [("{", "}"), ("[", "]")]:
-                    si = raw.find(sc)
-                    ei = raw.rfind(ec)
-                    if si != -1 and ei > si:
-                        raw = raw[si:ei+1]
-                        break
+            if not raw.startswith(("{", "[")):
+                m = _re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw)
+                if m:
+                    raw = m.group(1).strip()
+                else:
+                    for sc, ec in [("{", "}"), ("[", "]")]:
+                        si, ei = raw.find(sc), raw.rfind(ec)
+                        if si != -1 and ei > si:
+                            raw = raw[si:ei + 1]
+                            break
             actual_model = resp.model or model
             in_tok = resp.usage.prompt_tokens if resp.usage else 0
             out_tok = resp.usage.completion_tokens if resp.usage else 0
