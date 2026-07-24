@@ -25,10 +25,7 @@ env:
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
 		echo "Created .env from .env.example."; \
-		echo "ACTION REQUIRED: open .env and fill in:"; \
-		echo "  OPENROUTER_API_KEY   -- https://openrouter.ai/keys"; \
-		echo "  SUPABASE_JWT_SECRET  -- must be >=32 chars"; \
-		echo "  VISITOR_HMAC_SECRET  -- run: python3 -c 'import secrets; print(secrets.token_hex(32))'"; \
+		echo "ACTION REQUIRED: set OPENROUTER_API_KEY in .env"; \
 	fi
 
 ## build       Build Docker images (docker compose build --pull)
