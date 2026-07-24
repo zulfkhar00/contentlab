@@ -71,12 +71,14 @@ async def auth_user():
     yield user_id
 
     async with _db_conn() as db:
+        await db.execute(text("SET session_replication_role = replica"))
         await db.execute(
             text("DELETE FROM projects WHERE user_id = :uid"), {"uid": user_id}
         )
         await db.execute(
             text("DELETE FROM auth.users WHERE id = :uid"), {"uid": user_id}
         )
+        await db.execute(text("SET session_replication_role = DEFAULT"))
         await db.commit()
 
 

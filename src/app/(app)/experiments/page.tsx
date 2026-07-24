@@ -5,7 +5,7 @@
 // row + hypothesis summary + experiment-integrity panel + three variant cards
 // + a compact timeline + one contextual primary action.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Copy, Check, ClipboardCheck, ClipboardList, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   type VariantStatus,
 } from "@/lib/experiment";
 import { useHypotheses, type Hypothesis } from "@/lib/hypotheses";
+import { experimentApi, type Experiment as ApiExperiment } from "@/lib/api-client";
 
 function StatusPill({
   children,
@@ -121,6 +122,11 @@ export default function ExperimentWorkspacePage() {
   const [urlDraft, setUrlDraft] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [copiedRole, setCopiedRole] = useState<VariantRole | null>(null);
+  const [apiExperiment, setApiExperiment] = useState<ApiExperiment | null>(null);
+
+  useEffect(() => {
+    experimentApi.getActive().then(setApiExperiment).catch(() => {});
+  }, [loaded]);
 
   const linked = useMemo(
     () => (hypothesesLoaded ? findLinkedHypothesis(experiment, hypotheses) : null),

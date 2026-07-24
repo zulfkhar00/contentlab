@@ -15,6 +15,8 @@ import {
   type Status,
 } from "@/lib/hypotheses";
 import { SEED_INSIGHTS, toHypothesis, insightClicksPer1k, type Insight } from "@/lib/insights";
+import { hypothesisApi } from "@/lib/api-client";
+import { apiToFrontend } from "@/lib/api-adapters";
 
 const FILTERS: Array<Status | "all"> = [
   "all",
@@ -117,10 +119,20 @@ export default function ResearchLibraryPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Status | "all">("all");
   const [view, setView] = useState<ResearchView>("library");
+  const [apiLoading, setApiLoading] = useState(false);
 
   useEffect(() => {
     setView(loadResearchView());
   }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (hypotheses.length > 0) return;
+    hypothesisApi.list().then((items) => {
+      if (items.length > 0) setAll(items.map(apiToFrontend));
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   function switchView(v: ResearchView) {
     setView(v);
@@ -193,8 +205,19 @@ export default function ResearchLibraryPage() {
   );
 
   function generateInitial() {
-    setAll(SEED_HYPOTHESES);
-    setSelectedId(SEED_HYPOTHESES[0].id);
+    setApiLoading(true);
+    hypothesisApi.generate()
+      .then((items) => {
+        const mapped = items.map(apiToFrontend);
+        setAll(mapped);
+        if (mapped.length > 0) setSelectedId(mapped[0].id);
+      })
+      .catch(() => {
+        // API unavailable — fall back to local seed
+        setAll(SEED_HYPOTHESES);
+        setSelectedId(SEED_HYPOTHESES[0].id);
+      })
+      .finally(() => setApiLoading(false));
   }
 
   function generateMore() {

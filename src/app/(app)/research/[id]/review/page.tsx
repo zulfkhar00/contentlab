@@ -14,6 +14,8 @@ import {
   type Hypothesis,
 } from "@/lib/hypotheses";
 import { SEED_INSIGHTS } from "@/lib/insights";
+import { hypothesisApi } from "@/lib/api-client";
+import { metricToApi } from "@/lib/api-adapters";
 
 type Draft = {
   researchQuestion: string;
@@ -145,12 +147,39 @@ export default function HypothesisReviewPage() {
   }
 
   function saveDraft() {
+    if (!hypothesis) return;
+    hypothesisApi.patch(hypothesis.id, {
+      title: workingDraft!.researchQuestion ? undefined : undefined,
+      statement: workingDraft!.statement || undefined,
+      research_question: workingDraft!.researchQuestion || undefined,
+      independent_variable: workingDraft!.independentVariable || undefined,
+      control_condition: workingDraft!.controlCondition || undefined,
+      treatment_condition: workingDraft!.treatmentCondition || undefined,
+      controlled_elements: workingDraft!.controlledElements.length > 0 ? workingDraft!.controlledElements : undefined,
+      contradiction_condition: workingDraft!.contradictionCondition || undefined,
+      primary_metric: metricToApi(workingDraft!.primaryMetric) || undefined,
+    }).catch(() => {});
     persistDraft("draft");
   }
 
   function approveAndGenerate() {
-    persistDraft("approved");
-    router.push("/research");
+    if (!hypothesis) return;
+    hypothesisApi.approveAndGenerate(hypothesis.id, {
+      statement: workingDraft!.statement || undefined,
+      research_question: workingDraft!.researchQuestion || undefined,
+      independent_variable: workingDraft!.independentVariable || undefined,
+      control_condition: workingDraft!.controlCondition || undefined,
+      treatment_condition: workingDraft!.treatmentCondition || undefined,
+      controlled_elements: workingDraft!.controlledElements.length > 0 ? workingDraft!.controlledElements : undefined,
+      contradiction_condition: workingDraft!.contradictionCondition || undefined,
+      primary_metric: metricToApi(workingDraft!.primaryMetric) || undefined,
+    }).then(() => {
+      persistDraft("approved");
+      router.push("/research");
+    }).catch(() => {
+      persistDraft("approved");
+      router.push("/research");
+    });
   }
 
   const parentTitle = findParentTitle(hypothesis.parentInsightId);
