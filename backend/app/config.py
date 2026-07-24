@@ -8,7 +8,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:54322/postgres"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:15432/postgres"
     supabase_jwt_secret: str = "super-secret-jwt-token-with-at-least-32-characters-long"
     supabase_jwt_algorithms: list[str] = ["HS256"]
     environment: str = "development"

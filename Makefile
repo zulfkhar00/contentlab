@@ -76,10 +76,14 @@ shell:
 test-unit:
 	docker compose exec backend pytest tests/unit/ -v
 
-## e2e         Run end-to-end tests locally (VPN must be OFF)
-e2e:
+## e2e         Run accelerated end-to-end test (VPN must be OFF)
+e2e: check-docker check-uv env
 	@echo "NOTE: VPN must be off before running E2E tests."
-	python3 scripts/accelerated_e2e.py
+	@docker compose up -d db
+	@docker compose stop backend worker >/dev/null 2>&1 || true
+	@echo "Running accelerated E2E (window: $${E2E_WINDOW_SECONDS:-30}s per variant)..."
+	DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0.1:15432/postgres' \
+	  uv run --project backend scripts/accelerated_e2e.py
 
 ## clean       Remove containers, volumes, and locally built images
 clean:

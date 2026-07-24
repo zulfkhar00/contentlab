@@ -42,7 +42,7 @@ from app.config import settings  # noqa: E402
 
 BACKEND_PORT = 18001
 BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}"
-WINDOW_HOURS = 2 / 60           # 2 minutes as a fraction of an hour
+WINDOW_HOURS = float(os.environ.get('E2E_WINDOW_SECONDS', '30')) / 3600  # default 30s per variant; override with E2E_WINDOW_SECONDS
 POLL_INTERVAL = 3               # seconds between DB polls
 MAX_POLL = 420                  # max seconds to wait for any single step
 VENV = sys.executable
