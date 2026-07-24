@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
 
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
 LANGUAGE sql STABLE AS $$
-  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::json->>'sub'
+  SELECT (NULLIF(current_setting('request.jwt.claims', true), '')::json->>'sub')::uuid
 $$;
 
 CREATE OR REPLACE FUNCTION auth.role() RETURNS text
