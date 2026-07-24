@@ -543,7 +543,7 @@ async def main() -> None:
         tl.log("Waiting for generate_insight (real Claude)")
         await wait_job("generate_insight", exp_id, timeout=300)
         insight = await db1(
-            "SELECT id FROM insights WHERE experiment_id = :eid ORDER BY created_at DESC LIMIT 1",
+            "SELECT id FROM insights WHERE experiment_id = :eid AND is_current = true LIMIT 1",
             eid=exp_id,
         )
         assert insight, "No insight found"
@@ -552,7 +552,7 @@ async def main() -> None:
 
         # Candidates
         cands = await dball(
-            "SELECT id, title FROM follow_up_candidates WHERE insight_id = :iid",
+            "SELECT id, statement FROM follow_up_candidates WHERE insight_id = :iid",
             iid=insight_id,
         )
         assert len(cands) == 3, f"Expected 3 candidates, got {len(cands)}"
@@ -574,7 +574,7 @@ async def main() -> None:
         child_id = accepted.get("id")
         assert child_id
         child = await db1(
-            "SELECT source_hypothesis_id, source_experiment_id FROM hypotheses WHERE id = :hid",
+            "SELECT h.parent_hypothesis_id AS source_hypothesis_id, i.experiment_id AS source_experiment_id " "FROM hypotheses h " "JOIN follow_up_candidates c ON c.id = h.source_candidate_id " "JOIN insights i ON i.id = c.insight_id " "WHERE h.id = :hid",
             hid=child_id,
         )
         assert str(child["source_hypothesis_id"]) == hyp_id, "Wrong parent hypothesis"
