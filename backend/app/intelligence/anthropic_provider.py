@@ -110,10 +110,22 @@ _SCHEMAS: dict[str, dict] = {
                         "on_screen_text": {"type": "string"},
                         "script_sections": {"type": "object"},
                         "recording_guidance": {"type": "object"},
+                        "claims_used": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "fact_id": {"type": "string"},
+                                    "usage": {"type": "string"},
+                                },
+                                "required": ["fact_id", "usage"],
+                                "additionalProperties": False,
+                            }
+                        },
                     },
                     "required": ["position", "treatment_role", "title", "variable_value",
                                  "hook", "hook_delivery_note", "context", "on_screen_text",
-                                 "script_sections", "recording_guidance"],
+                                 "script_sections", "recording_guidance", "claims_used"],
                     "additionalProperties": False,
                 },
                 "minItems": 3,
@@ -167,11 +179,12 @@ _SCHEMAS: dict[str, dict] = {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "variant_position": {"type": "string", "enum": ["A", "B", "C"]},
+                        "variant_position": {"type": "string", "enum": ["A", "B", "C", ""]},
                         "metric": {"type": "string"},
+                        "comparison": {"type": "string"},
                         "value": {"type": "number"},
                     },
-                    "required": ["variant_position", "metric", "value"],
+                    "required": ["metric", "value"],
                     "additionalProperties": False,
                 },
             },
@@ -526,21 +539,48 @@ class AnthropicIntelligenceProvider:
             validate_insight(result)
             # Cross-check cited metric values against evidence packet
             from app.intelligence.validators import ValidationError
+            _METRIC_FIELDS = {
+                "unique_clicks_per_1k": "unique_clicks_per_1k",
+                "clicks_per_1k_views": "unique_clicks_per_1k",
+                "views": "views_delta",
+                "views_delta": "views_delta",
+                "comments": "comments_delta",
+                "comments_per_1k_views": "comments_per_1k",
+                "product_clicks": "attributed_unique_clicks",
+            }
             for ref in result.get("evidence_references", []):
                 pos = ref.get("variant_position")
-                metric = ref.get("metric")
+                metric = ref.get("metric", "")
                 cited_value = ref.get("value")
+                comparison = ref.get("comparison", "")
+                if not pos or cited_value is None:
+                    continue
                 actual_item = evidence_map.get(pos)
                 if not actual_item:
                     continue
-                actual_value = actual_item.get("unique_clicks_per_1k")
-                if metric == "unique_clicks_per_1k" and actual_value is not None and cited_value is not None:
-                    if abs(float(cited_value) - float(actual_value)) > 0.5:
-                        raise ValidationError(
-                            f"Cited metric for variant {pos} ({cited_value}) does not match "
-                            f"evidence packet ({actual_value})",
-                            f"Use the exact value from the evidence: {actual_value}"
-                        )
+                # Handle calculated comparisons (lift vs control)
+                if comparison == "lift_vs_control":
+                    ctrl = evidence_map.get("A")
+                    if ctrl and ctrl.get("unique_clicks_per_1k") and actual_item.get("unique_clicks_per_1k"):
+                        expected_lift = float(actual_item["unique_clicks_per_1k"]) / max(float(ctrl["unique_clicks_per_1k"]), 0.01)
+                        if abs(float(cited_value) - expected_lift) > 0.1:
+                            raise ValidationError(
+                                f"Cited lift for {pos} ({cited_value:.2f}x) does not match "
+                                f"backend calculation ({expected_lift:.2f}x)",
+                                f"Use the exact backend-calculated lift: {expected_lift:.2f}"
+                            )
+                else:
+                    field = _METRIC_FIELDS.get(metric)
+                    if field:
+                        actual_value = actual_item.get(field)
+                        if actual_value is not None:
+                            tolerance = max(0.5, abs(float(actual_value)) * 0.02)
+                            if abs(float(cited_value) - float(actual_value)) > tolerance:
+                                raise ValidationError(
+                                    f"Cited {metric} for variant {pos} ({cited_value}) does not match "
+                                    f"evidence packet ({actual_value})",
+                                    f"Use the exact value from the evidence packet: {actual_value}"
+                                )
 
         ai_runs: list = []
         rg = str(uuid.uuid4())

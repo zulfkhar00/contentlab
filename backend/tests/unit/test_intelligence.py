@@ -120,7 +120,10 @@ def test_validate_no_invented_facts_invented_money():
 # ── Evaluation suite (fake provider) ─────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_eval_suite_fake_all_pass():
+async def test_eval_suite_fake_provider_all_pass():
+    """Runs the full eval suite against FakeIntelligenceProvider only.
+    For live Claude evaluation use: python -m app.intelligence.evaluation.run
+    """
     from app.intelligence.fake import FakeIntelligenceProvider
     provider = FakeIntelligenceProvider()
     results = await run_eval(provider)

@@ -48,11 +48,6 @@ class InsightService:
         exp_row = exp_result.mappings().first()
         if not exp_row:
             raise ProjectNotFound(f"Experiment {experiment_id} not found")
-        if exp_row["status"] != "analyzing":
-            raise DomainError(
-                f"Experiment must be in 'analyzing' status; current: {exp_row['status']}"
-            )
-
         # Check for existing insight
         existing = await self._repo.get_current_for_experiment(scope, experiment_id)
         if existing:
@@ -65,6 +60,12 @@ class InsightService:
             else:
                 existing["evidence_items"] = []
             return existing
+
+        if exp_row["status"] != "analyzing":
+            raise DomainError(
+                f"Experiment must be in 'analyzing' status; current: {exp_row['status']}"
+            )
+
 
         # Load hypothesis snapshot + evidence
         hypothesis_snapshot = exp_row["hypothesis_design_snapshot"]
