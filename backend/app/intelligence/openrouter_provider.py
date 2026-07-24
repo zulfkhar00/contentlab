@@ -61,11 +61,16 @@ def _hash(payload: dict) -> str:
 
 
 def _model_for(operation_setting_key: str) -> str:
-    """Return OpenRouter model ID for a given config key, with sane fallback."""
+    """Return OpenRouter model ID for a given config key, with sane fallback.
+    OpenRouter uses aliases without date suffixes (e.g. anthropic/claude-haiku-4-5)
+    so we strip known date-suffixed variants before building the model string.
+    """
+    import re as _re
     configured = getattr(settings, operation_setting_key, "")
     if not configured:
         return _OPENROUTER_MODELS[operation_setting_key]
-    # If already prefixed keep as-is; otherwise add anthropic/ prefix
+    # Strip trailing date suffix that OpenRouter does not accept
+    configured = _re.sub(r"(-20\d{6,})+$", "", configured)
     if "/" in configured:
         return configured
     return f"anthropic/{configured}"
@@ -93,10 +98,24 @@ async def _call(
                     {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
-                response_format={"type": "json_object"},
+                # response_format omitted: Claude via OpenRouter ignores it
                 timeout=timeout,
             )
-            raw = resp.choices[0].message.content or ""
+        raw = (resp.choices[0].message.content or "").strip()
+        # Extract JSON if model wrapped it in markdown code fences
+        if not raw.startswith(("{", "[")):
+            import re as _re
+            m = _re.search(r'```(?:json)?\s*([\s\S]+?)\s*```', raw)
+            if m:
+                raw = m.group(1).strip()
+            else:
+                # Try to find first { or [ in the response
+                for sc, ec in [("{", "}"), ("[", "]")]:
+                    si = raw.find(sc)
+                    ei = raw.rfind(ec)
+                    if si != -1 and ei > si:
+                        raw = raw[si:ei+1]
+                        break
             actual_model = resp.model or model
             in_tok = resp.usage.prompt_tokens if resp.usage else 0
             out_tok = resp.usage.completion_tokens if resp.usage else 0

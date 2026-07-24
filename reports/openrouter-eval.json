@@ -1,0 +1,120 @@
+{
+  "provider": "openrouter",
+  "total_cases": 14,
+  "passed": 0,
+  "failed": 14,
+  "results": [
+    {
+      "case": "gen_hyp_standard_product",
+      "operation": "generateHypotheses",
+      "passed": false,
+      "latency_ms": 22956,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "gen_hyp_minimal_project",
+      "operation": "generateHypotheses",
+      "passed": false,
+      "latency_ms": 22834,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "design_exp_flagd",
+      "operation": "designExperiment",
+      "passed": false,
+      "latency_ms": 20153,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "design_exp_comments_metric",
+      "operation": "designExperiment",
+      "passed": false,
+      "latency_ms": 19113,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "revise_brief_punchier",
+      "operation": "reviseBrief",
+      "passed": false,
+      "latency_ms": 49,
+      "error": "Error code: 400 - {'error': {'message': 'anthropic/claude-haiku-4-5-20251001 is not a valid model ID', 'code': 400}, 'user_id': 'user_3F09xdZVUVzJ0gj1CzT95WRXTE4'}",
+      "output_preview": ""
+    },
+    {
+      "case": "revise_brief_shorten",
+      "operation": "reviseBrief",
+      "passed": false,
+      "latency_ms": 15,
+      "error": "Error code: 400 - {'error': {'message': 'anthropic/claude-haiku-4-5-20251001 is not a valid model ID', 'code': 400}, 'user_id': 'user_3F09xdZVUVzJ0gj1CzT95WRXTE4'}",
+      "output_preview": ""
+    },
+    {
+      "case": "analyze_flagd_directional",
+      "operation": "analyzeExperiment",
+      "passed": false,
+      "latency_ms": 9301,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "analyze_mixed_result",
+      "operation": "analyzeExperiment",
+      "passed": false,
+      "latency_ms": 7732,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "analyze_insufficient_views",
+      "operation": "analyzeExperiment",
+      "passed": false,
+      "latency_ms": 8099,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "analyze_execution_deviation",
+      "operation": "analyzeExperiment",
+      "passed": false,
+      "latency_ms": 8727,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "analyze_zero_views_variant",
+      "operation": "analyzeExperiment",
+      "passed": false,
+      "latency_ms": 7870,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "candidates_from_directional",
+      "operation": "generateCandidates",
+      "passed": false,
+      "latency_ms": 9365,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "candidates_from_mixed",
+      "operation": "generateCandidates",
+      "passed": false,
+      "latency_ms": 10246,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    },
+    {
+      "case": "candidates_from_insufficient",
+      "operation": "generateCandidates",
+      "passed": false,
+      "latency_ms": 9534,
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "output_preview": ""
+    }
+  ]
+}
