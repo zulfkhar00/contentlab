@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:15-alpine
     ports:
-      - \"54322:5432\"
+      - 54322:5432
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d
