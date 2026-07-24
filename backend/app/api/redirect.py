@@ -22,12 +22,10 @@ from app.db.session import AsyncSessionLocal
 from app.services.redirect_service import (
     find_active_window,
     generate_visitor_cookie_value,
-    get_client_ip,
     persist_redirect_event,
     resolve_redirect,
     ua_hash,
     validate_destination_url,
-    visitor_key_fallback,
     visitor_key_from_cookie,
 )
 
@@ -70,17 +68,19 @@ async def handle_redirect(
             project_id = str(project["id"])
 
             # ── Visitor identity ─────────────────────────────────────────────
-            if cl_visitor:
-                # Cookie exists: primary path — project-scoped HMAC over the cookie value
-                visitor_key = visitor_key_from_cookie(project_id, cl_visitor)
-            else:
-                # Fallback: coarse IP + UA + accept-language
-                client_ip = get_client_ip(request)
-                ua = request.headers.get("user-agent", "")
-                lang = request.headers.get("accept-language", "")
-                visitor_key = visitor_key_fallback(project_id, client_ip, ua, lang)
-                # Assign a new cookie so future requests use the primary path
+            # Cookie-first: derive a stable, project-scoped HMAC over the cookie
+            # value. When no cookie is present we mint one NOW and derive the
+            # visitor_key from it, so the very first click and every subsequent
+            # click from the same session share one identity. Cookie-rejecting
+            # clients still get a fresh key per request — that's correct: we
+            # can't reliably link them without a cookie, and IP+UA fallback
+            # merges NAT'd users into one bogus identity, which is worse.
+            if not cl_visitor:
                 new_cookie_value = generate_visitor_cookie_value()
+                cookie_for_key = new_cookie_value
+            else:
+                cookie_for_key = cl_visitor
+            visitor_key = visitor_key_from_cookie(project_id, cookie_for_key)
 
             # ── Attribution ──────────────────────────────────────────────────
             window = await find_active_window(db, project_id)
